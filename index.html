@@ -23,6 +23,7 @@
 }
 html{box-sizing:border-box;height:100%}
 *,*::before,*::after{box-sizing:inherit}
+[hidden]{display:none!important}
 body{height:100%;margin:0;background:var(--hall);color:var(--ink);font:500 15px/1.4 var(--f-body);overflow:hidden}
 button,select,input{font:inherit;color:inherit}
 :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
@@ -90,6 +91,11 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px
 .ph-btn{width:100%;text-align:left;border:1px solid var(--rule);background:var(--paper-2);padding:12px;cursor:pointer;font:600 18px/1.2 var(--f-body)}
 .ph-btn[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
 .note{font-size:13px;color:var(--ink-2);margin:10px 0 0}
+.slide{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px;color:var(--ink-2);margin-top:16px}
+.slide input{width:100%;accent-color:var(--red)}
+.eyeval{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font:500 14px/1.4 var(--f-mono);margin:12px 0}
+.align-btns{display:flex;gap:8px;margin-top:14px}
+.align-btns .btn-ink{font-size:20px;padding:11px 14px}
 
 .verdict{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;border-bottom:3px solid var(--ink);padding-bottom:10px}
 .verdict .tot{font:700 64px/0.9 var(--f-display)}
@@ -123,8 +129,7 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px
 }
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
-</head>
-<body>
+</head><body>
 
 <div id="app">
   <div id="stage">
@@ -136,18 +141,27 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px
     <div class="hud" id="hud-gear"><em>Sur vous</em><span class="chip" data-gear="cap">Casquette</span><span class="chip" data-gear="whistle">Sifflet</span><span class="chip" data-gear="remote">Télécommande Chronotir</span></div>
     <div id="toast" hidden></div>
     <div id="bubble" hidden></div>
-    <button id="lens-off" hidden>Reposer la loupe</button>
+    <button id="lens-off">Sortir la loupe</button>
   </div>
 
   <aside id="panel">
     <header class="ph">
-      <p class="eyebrow">Arbitrage · Tir à 18 m · Blason de 40 cm</p>
+      <p class="eyebrow" id="eyebrow">Arbitrage</p>
       <h1>Jugement de cordon</h1>
       <div class="opts">
+        <label>Cible
+          <select id="disc"><option value="indoor" selected>Salle 18 m : 4 blasons de 40 cm</option><option value="tae">TAE : blason de 122 cm</option></select>
+        </label>
+        <label>Ligne
+          <select id="line"><option value="mix" selected>Aléatoire</option><option value="l8">8 / 9</option><option value="l9">9 / 10</option><option value="lX">10 / X</option></select>
+        </label>
         <label>Niveau
           <select id="level"><option value="easy">Facile</option><option value="normal" selected>Normal</option><option value="hard">Difficile</option></select>
         </label>
         <label><input type="checkbox" id="coach"> Aide immédiate</label>
+        <label>Blason
+          <select id="wear"><option value="new">Neuf</option><option value="worn">Abîmé</option><option value="riddled">Criblé d’impacts</option><option value="mix" selected>Aléatoire</option></select>
+        </label>
       </div>
     </header>
     <div class="pb" id="pbody">
@@ -155,6 +169,13 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px
         <h2>Actions à la cible</h2>
         <ul id="actions"></ul>
         <p class="note" id="remaining"></p>
+      </section>
+      <section id="view-align" hidden>
+        <h2 id="align-title">Dans l’axe de la ligne</h2>
+        <p class="note" style="margin-top:0">Choisissez la hauteur de vos yeux pour regarder dans l’axe de la ligne, puis validez. La tolérance est large : une dizaine de degrés.</p>
+        <label class="slide" for="eye"><span>Se baisser</span><input type="range" id="eye" min="0.6" max="2" step="0.01" value="1.6"><span>Se lever</span></label>
+        <div class="eyeval"><span id="eye-val">Yeux à 1,60 m</span><span id="eye-gauge"></span></div>
+        <div class="align-btns"><button class="btn2" id="align-cancel">Annuler</button><button class="btn-ink" id="align-ok">Valider la position</button></div>
       </section>
       <section id="view-announce" hidden>
         <h2>Score</h2>
@@ -165,7 +186,7 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px
       </section>
       <section id="view-result" class="res" hidden></section>
     </div>
-    <footer class="pf">
+    <footer class="pf" id="pf">
       <button class="big" id="btn-announce">Annoncer le score</button>
       <div id="ann-foot" hidden style="display:none;gap:8px">
         <button class="btn2" id="btn-back">Retour</button>
@@ -181,7 +202,8 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px
 (function () {
 'use strict';
 const $ = (s) => document.querySelector(s);
-const V3 = THREE.Vector3, MM = 0.001, LINE_W = 0.8, CENTER_Y = 1.3, UP = new V3(0, 1, 0);
+const V3 = THREE.Vector3, MM = 0.001, CENTER_Y = 1.3, UP = new V3(0, 1, 0), TAU = Math.PI * 2;
+let LINE_W = 0.8;                                    /* largeur de la ligne en mm, fixée par la discipline (2 mm maximum au règlement) */
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
@@ -193,56 +215,207 @@ catch (e) { $('#nogl').hidden = false; return; }
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setClearColor(0x0e1620);
 const scene = new THREE.Scene();
-const cam = new THREE.PerspectiveCamera(45, 1, 0.005, 60);
+const cam = new THREE.PerspectiveCamera(45, 1, 0.005, 120);
 scene.add(new THREE.AmbientLight(0xffffff, 0.62));
 const sun = new THREE.DirectionalLight(0xffffff, 0.42);
 sun.position.set(1.2, 3, 3); scene.add(sun);
+const MAXTEX = renderer.capabilities.maxTextureSize, MAXANISO = renderer.capabilities.getMaxAnisotropy();
 
-/* ---------- Salle, cible, support ---------- */
-function box(w, h, d, color, x, y, z) {
+/* ---------- Décors : salle (18 m) ou terrain (TAE) ---------- */
+function addBox(parent, w, h, d, color, x, y, z) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: color }));
-  m.position.set(x, y, z); scene.add(m); return m;
+  m.position.set(x, y, z); parent.add(m); return m;
 }
-box(16, 0.02, 16, 0x5b4b3a, 0, -0.01, 4);
-box(16, 6, 0.1, 0x1b2838, 0, 3, -1.5);
-for (let i = -6; i <= 6; i++) box(0.05, 6, 0.02, 0x243750, i * 1.2, 3, -1.44);
-box(0.82, 0.82, 0.12, 0xc2aa6e, 0, CENTER_Y, -0.062);
-[-0.3, 0.3].forEach(function (x) {
-  box(0.05, 0.95, 0.05, 0x39404a, x, 0.475, -0.28);
-  box(0.05, 0.05, 0.3, 0x39404a, x, 0.9, -0.16);
-  box(0.05, 0.03, 0.5, 0x39404a, x, 0.015, -0.28);
-});
-box(0.7, 0.04, 0.04, 0x39404a, 0, 0.5, -0.28);
+const floorMesh = addBox(scene, 80, 0.02, 80, 0x5b4b3a, 0, -0.01, 4);
+const envIn = new THREE.Group(), envOut = new THREE.Group(); scene.add(envIn, envOut);
+addBox(envIn, 16, 6, 0.1, 0x1b2838, 0, 3, -1.5);
+for (let i = -6; i <= 6; i++) addBox(envIn, 0.05, 6, 0.02, 0x243750, i * 1.2, 3, -1.44);
+for (let i = -12; i <= 12; i++) { const h = rand(4, 9); addBox(envOut, 3.6, h, 3, 0x2f4a2a, i * 3.4, h / 2, -32); }
+addBox(envOut, 90, 0.6, 3, 0x3d5c33, 0, 0.3, -28);
 
-function makeBlasonTexture() {
-  const S = Math.min(4096, renderer.capabilities.maxTextureSize);
-  const cv = document.createElement('canvas'); cv.width = cv.height = S;
-  const g = cv.getContext('2d');
-  const px = S / 440, c = S / 2;           /* 440 mm de papier, 9,3 px par mm */
-  g.fillStyle = '#f4f4ef'; g.fillRect(0, 0, S, S);
-  const zones = ['#f7d117', '#d9261c', '#49b6e8', '#161616', '#f4f4ef'];
-  for (let k = 10; k >= 1; k--) {
-    g.fillStyle = zones[Math.floor((k - 1) / 2)];
-    g.beginPath(); g.arc(c, c, k * 20 * px, 0, Math.PI * 2); g.fill();
-  }
-  g.lineWidth = LINE_W * px;
-  [20, 40, 60, 80, 100, 140, 180, 200].forEach(function (r) {
-    g.strokeStyle = (r === 140) ? '#f4f4ef' : '#111';
-    g.beginPath(); g.arc(c, c, r * px, 0, Math.PI * 2); g.stroke();
+/* ---------- Support : butte de paille et pieds ---------- */
+const stand = new THREE.Group(); scene.add(stand);
+function buildStand(bw, bh) {
+  while (stand.children.length) { const c = stand.children[0]; stand.remove(c); c.geometry.dispose(); c.material.dispose(); }
+  const bottom = CENTER_Y - bh / 2, leg = 0x39404a;
+  addBox(stand, bw, bh, 0.14, 0xc2aa6e, 0, CENTER_Y, -0.072);
+  [-1, 1].forEach(function (s) {
+    const x = s * (bw / 2 - 0.15);
+    addBox(stand, 0.05, bottom + 0.4, 0.05, leg, x, (bottom + 0.4) / 2, -0.3);
+    addBox(stand, 0.05, 0.05, 0.3, leg, x, bottom + 0.25, -0.15);
+    addBox(stand, 0.05, 0.03, 0.5, leg, x, 0.015, -0.3);
   });
-  g.strokeStyle = '#111'; g.lineWidth = 0.6 * px;
-  g.beginPath(); g.moveTo(c - 3 * px, c); g.lineTo(c + 3 * px, c); g.moveTo(c, c - 3 * px); g.lineTo(c, c + 3 * px); g.stroke();
-  const t = new THREE.CanvasTexture(cv);
-  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  return t;
+  addBox(stand, bw * 0.8, 0.04, 0.04, leg, 0, bottom * 0.5, -0.3);
 }
-const blason = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.44), new THREE.MeshLambertMaterial({ map: makeBlasonTexture() }));
-blason.position.set(0, CENTER_Y, 0); scene.add(blason);
-const pinGeo = new THREE.CylinderGeometry(0.004, 0.004, 0.01, 12).rotateX(Math.PI / 2);
-const pinMat = new THREE.MeshPhongMaterial({ color: 0xcfd3d8 });
-[[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (p) {
-  const m = new THREE.Mesh(pinGeo, pinMat); m.position.set(p[0] * 0.205, CENTER_Y + p[1] * 0.205, 0.005); scene.add(m);
-});
+
+/* ---------- Blasons : dessin des anneaux et de l'usure ---------- */
+const ZONES = ['#f7d117', '#d9261c', '#49b6e8', '#161616', '#f4f4ef'];
+const LINE_K = [0.5, 1, 2, 3, 4, 5, 7, 9, 10];       /* 0,5 : petit cercle du X (10 intérieur) */            /* pas de ligne entre bleu et noir, ni entre noir et blanc */
+function mapper(S, px, ox, oy) { return { X: function (m) { return S / 2 + (m - ox) * px; }, Y: function (m) { return S / 2 - (m - oy) * px; } }; }
+function drawBase(g, S, px, ox, oy, sp) {
+  const M = mapper(S, px, ox, oy), RP = sp.ZR / 2;
+  g.fillStyle = '#f4f4ef'; g.fillRect(0, 0, S, S);
+  for (let k = 10; k >= 1; k--) { g.fillStyle = ZONES[Math.floor((k - 1) / 2)]; g.beginPath(); g.arc(M.X(0), M.Y(0), k * RP * px, 0, TAU); g.fill(); }
+  g.lineWidth = LINE_W * px;
+  LINE_K.forEach(function (k) { g.strokeStyle = (k === 7) ? '#f4f4ef' : '#111'; g.beginPath(); g.arc(M.X(0), M.Y(0), k * RP * px, 0, TAU); g.stroke(); });
+  g.strokeStyle = '#111'; g.lineWidth = 0.6 * px;
+  g.beginPath(); g.moveTo(M.X(-2), M.Y(0)); g.lineTo(M.X(2), M.Y(0)); g.moveTo(M.X(0), M.Y(-2)); g.lineTo(M.X(0), M.Y(2)); g.stroke();
+}
+/* Usure en deux temps : on tire des éléments (mm, repère du blason), puis on les dessine sur le blason et sur la zone agrandie */
+function genWear(level, sp, A) {
+  const P = { erase: [], holes: [], smudge: [], crease: [], tears: [], corner: null, specks: [] }, info = { erased: false, near: false, lineHoles: false, unreadable: false };
+  if (!level) return { P: P, info: info };
+  const heavy = level === 2, K = sp.ZR / 40, RP = sp.ZR / 2, half = sp.paper / 2, hasA = !!A, rl = hasA ? A.rl : sp.ZR;
+  const ax = hasA ? A.x : 1e5, ay = hasA ? A.y : 1e5, d0 = Math.hypot(ax, ay), px0 = ax * rl / d0, py0 = ay * rl / d0;
+  const dA = function (x, y) { return Math.hypot(x - ax, y - ay); };
+  /* un impact ne recouvre ni la flèche ni le point où son tube approche la ligne */
+  const okHole = function (x, y) { return !hasA || (dA(x, y) >= 8 && Math.hypot(x - px0, y - py0) >= 10); };
+  const mkHole = function (x, y) { const rr = rand(2.7, 3.6); P.holes.push({ x: x, y: y, rx: rr * rand(0.95, 1.25), ry: rr * rand(0.85, 1.05), rot: rand(0, Math.PI) }); };
+  if (hasA && Math.random() < 0.6) {                 /* ligne rouge/jaune effacée d'un seul côté, à 14 mm au moins du contact */
+    const th = Math.atan2(ay, ax), s = Math.random() < 0.5 ? -1 : 1, a0 = th + s * (14 / rl);
+    P.erase.push({ r: rl, a0: a0, a1: a0 + s * rand(0.45, 0.8) }); info.erased = true;
+  }
+  if (hasA) {
+    const th = Math.atan2(ay, ax), onLine = function (l) { return [rl * Math.cos(th + l / rl), rl * Math.sin(th + l / rl)]; };
+    /* trou noir sur le cordon, à l'endroit même du contact : impossible de juger, le doute profite à l'archer */
+    if (Math.random() < (heavy ? 0.35 : 0.2)) { const p = onLine(rand(-1.5, 1.5)); P.holes.push({ x: p[0], y: p[1], rx: 3.6, ry: 3.3, rot: rand(0, Math.PI) }); info.unreadable = true; info.lineHoles = true; }
+    /* trous noirs sur la ligne, près du contact : ils gênent la lecture mais la ligne reste déductible (arc imaginaire) */
+    for (let i = 0, nl = heavy ? 3 + Math.floor(Math.random() * 3) : 2 + Math.floor(Math.random() * 2); i < nl; i++) {
+      const l = (Math.random() < 0.5 ? -1 : 1) * rand(6, 17), p = onLine(l);
+      if (dA(p[0], p[1]) >= 8 && !P.holes.some(function (h) { return Math.hypot(h.x - p[0], h.y - p[1]) < 5; })) { mkHole(p[0], p[1]); info.lineHoles = true; }
+    }
+  }
+  [1, 3, 4, 5, 7, 9].forEach(function (k) {
+    if (Math.random() < 0.55) {
+      const r = k * RP, a = rand(0, TAU), len = rand(0.1, 0.5);
+      if (!hasA || dA(r * Math.cos(a + len / 2), r * Math.sin(a + len / 2)) >= 30 * K) P.erase.push({ r: r, a0: a, a1: a + len });
+    }
+  });
+  for (let i = 0, nh = Math.floor((heavy ? rand(110, 160) : rand(30, 55)) * K); i < nh; i++) {   /* anciens impacts, surtout vers le centre */
+    const r = (Math.random() < 0.7 ? 115 : 190) * K * Math.sqrt(Math.random()), a = rand(0, TAU), x = r * Math.cos(a), y = r * Math.sin(a);
+    if (okHole(x, y)) mkHole(x, y);
+  }
+  if (hasA) {
+    for (let i = 0, nn = heavy ? 16 + Math.floor(Math.random() * 8) : 3 + Math.floor(Math.random() * 3); i < nn; i++) {   /* impacts autour de la flèche */
+      const a = rand(0, TAU), dd = heavy ? 8 + 30 * Math.pow(Math.random(), 1.5) : rand(8, 18), x = ax + dd * Math.cos(a), y = ay + dd * Math.sin(a);
+      if (Math.hypot(x, y) < 195 * K && okHole(x, y)) { mkHole(x, y); info.near = true; }
+    }
+  }
+  for (let i = 0, ns = Math.floor(10 * K); i < ns; i++) {
+    const x = rand(-0.9 * half, 0.9 * half), y = rand(-0.9 * half, 0.9 * half), rr = rand(6, 22) * K;
+    if (!hasA || dA(x, y) >= rr + 28) P.smudge.push({ x: x, y: y, rr: rr, light: Math.random() < 0.5 });
+  }
+  for (let i = 0; i < 2; i++) {
+    const a = rand(0, Math.PI), off = rand(-150, 150) * K;
+    if (!hasA || Math.abs(ax * -Math.sin(a) + ay * Math.cos(a) - off) >= 28) P.crease.push({ a: a, off: off });
+  }
+  if (Math.random() < 0.3) {
+    for (let tries = 0; tries < 20; tries++) {
+      const a = rand(0, TAU), r = rand(100, 195) * K, x = r * Math.cos(a), y = r * Math.sin(a), rr = rand(10, 30) * K;
+      if (hasA && dA(x, y) < rr + 40) continue;
+      const pts = []; for (let i = 0; i < 11; i++) { const b = i / 11 * TAU, k = rr * rand(0.55, 1.1); pts.push([x + k * Math.cos(b), y + k * Math.sin(b)]); }
+      P.tears.push(pts); break;
+    }
+  }
+  if (Math.random() < 0.5) {
+    const sx = Math.random() < 0.5 ? -1 : 1, sy = Math.random() < 0.5 ? -1 : 1, L = rand(40, 90) * K;
+    P.corner = [[sx * (half + 10), sy * (half - L)], [sx * (half - L * rand(0.5, 1)), sy * (half + 10)], [sx * (half + 10), sy * (half + 10)]];
+  }
+  for (let i = 0, nk = Math.floor(500 * K * K); i < nk; i++) {
+    const x = rand(-half + 5, half - 5), y = rand(-half + 5, half - 5);
+    if (!hasA || dA(x, y) >= 30) P.specks.push([x, y, rand(0.25, 0.8)]);
+  }
+  return { P: P, info: info };
+}
+let revealHoles = false;                              /* après l'annonce : trous translucides pour voir la ligne dessous */
+function drawPrims(g, S, px, ox, oy, P, sp) {
+  const M = mapper(S, px, ox, oy), X = M.X, Y = M.Y, hw = LINE_W / 2 + 0.3;
+  const zc = function (rr) { return ZONES[Math.max(0, Math.min(4, Math.floor(rr / sp.ZR)))]; };
+  const poly = function (r, a0, a1) {
+    const n = Math.max(8, Math.ceil(Math.abs(a1 - a0) * 80)); g.beginPath();
+    for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n, x = X(r * Math.cos(a)), y = Y(r * Math.sin(a)); if (i) g.lineTo(x, y); else g.moveTo(x, y); }
+    g.stroke();
+  };
+  g.lineCap = 'butt';
+  P.erase.forEach(function (e) {                      /* on repeint la ligne avec la couleur de chaque côté */
+    g.lineWidth = hw * px * 1.03;
+    g.strokeStyle = zc(e.r - 0.6); poly(e.r - hw / 2, e.a0, e.a1);
+    g.strokeStyle = zc(e.r + 0.6); poly(e.r + hw / 2, e.a0, e.a1);
+  });
+  P.smudge.forEach(function (s) {
+    const gr = g.createRadialGradient(X(s.x), Y(s.y), 0, X(s.x), Y(s.y), s.rr * px);
+    gr.addColorStop(0, s.light ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.14)'); gr.addColorStop(1, s.light ? 'rgba(255,255,255,0)' : 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(X(s.x) - s.rr * px, Y(s.y) - s.rr * px, s.rr * 2 * px, s.rr * 2 * px);
+  });
+  P.crease.forEach(function (c) {
+    const nx = -Math.sin(c.a), ny = Math.cos(c.a), cx = Math.cos(c.a), cy = Math.sin(c.a), L = 900;
+    const x0 = c.off * nx - L * cx, y0 = c.off * ny - L * cy, x1 = c.off * nx + L * cx, y1 = c.off * ny + L * cy;
+    g.lineWidth = 1.1 * px; g.strokeStyle = 'rgba(255,255,255,0.20)'; g.beginPath(); g.moveTo(X(x0), Y(y0)); g.lineTo(X(x1), Y(y1)); g.stroke();
+    g.lineWidth = 0.8 * px; g.strokeStyle = 'rgba(0,0,0,0.12)'; g.beginPath(); g.moveTo(X(x0) + px, Y(y0) + px); g.lineTo(X(x1) + px, Y(y1) + px); g.stroke();
+  });
+  P.holes.forEach(function (h) {
+    g.save(); g.translate(X(h.x), Y(h.y)); g.rotate(h.rot);
+    g.beginPath(); g.ellipse(0, 0, h.rx * px, h.ry * px, 0, 0, TAU);
+    g.fillStyle = revealHoles ? 'rgba(4,4,4,0.25)' : '#040404'; g.fill(); g.strokeStyle = 'rgba(255,255,255,0.4)'; g.lineWidth = 0.5 * px; g.stroke(); g.restore();
+  });
+  const shape = function (pts) { g.beginPath(); pts.forEach(function (p, i) { if (i) g.lineTo(X(p[0]), Y(p[1])); else g.moveTo(X(p[0]), Y(p[1])); }); g.closePath(); };
+  P.tears.forEach(function (pts) {
+    shape(pts); g.fillStyle = '#b8a066'; g.fill(); g.lineWidth = 1.4 * px; g.strokeStyle = 'rgba(250,250,244,0.95)'; g.stroke();
+    shape(pts); g.lineWidth = 0.5 * px; g.strokeStyle = 'rgba(60,45,20,0.6)'; g.stroke();
+  });
+  if (P.corner) { shape(P.corner); g.fillStyle = '#b8a066'; g.fill(); g.lineWidth = px; g.strokeStyle = 'rgba(250,250,244,0.95)'; g.stroke(); }
+  g.fillStyle = 'rgba(40,40,40,0.18)';
+  P.specks.forEach(function (s) { g.beginPath(); g.arc(X(s[0]), Y(s[1]), s[2] * px, 0, TAU); g.fill(); });
+}
+function renderFace(cv, S, px, ox, oy, sp, P) {
+  const g = cv.getContext('2d'); drawBase(g, S, px, ox, oy, sp); drawPrims(g, S, px, ox, oy, P, sp);
+}
+
+/* ---------- Disciplines ---------- */
+/* 18 m : 4 blasons de 40 cm, centres à 1,60 m et 1,00 m du sol, 60 cm d'écart (II.02, B.2.2.1.2). TAE : blason de 122 cm, centre à 1,30 m. */
+const DISC = {
+  indoor: { key: 'indoor', ZR: 40, LW: 0.8, paper: 440, boss: [1.22, 1.22], centers: [[-0.3, 1.6], [0.3, 1.6], [-0.3, 1.0], [0.3, 1.0]], S: 1536, camZ: 2.6, label: 'Arbitrage · Salle 18 m · 4 blasons de 40 cm, 3 flèches chacun' },
+  tae: { key: 'tae', ZR: 122, LW: 1.5, paper: 1300, boss: [1.5, 1.5], centers: [[0, 1.3]], S: 4096, camZ: 3.6, label: 'Arbitrage · Tir à l’arc extérieur · Blason de 122 cm, 24 flèches' }
+};
+const faces = [];
+let curDisc = null;
+const patch = { S: Math.min(2048, MAXTEX), canvas: document.createElement('canvas') };
+patch.canvas.width = patch.canvas.height = patch.S;
+patch.tex = new THREE.CanvasTexture(patch.canvas); patch.tex.anisotropy = MAXANISO;
+patch.mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.12), new THREE.MeshLambertMaterial({ map: patch.tex, transparent: true }));
+patch.mesh.position.set(0, CENTER_Y, 0.0006); scene.add(patch.mesh);
+const pinGeo = new THREE.CylinderGeometry(0.004, 0.004, 0.01, 12).rotateX(Math.PI / 2), pinMat = new THREE.MeshPhongMaterial({ color: 0xcfd3d8 });
+function setupDiscipline(key) {
+  if (curDisc && curDisc.key === key) return;
+  curDisc = DISC[key]; LINE_W = curDisc.LW;
+  faces.forEach(function (f) { scene.remove(f.mesh); scene.remove(f.pins); f.mesh.geometry.dispose(); f.mesh.material.dispose(); f.tex.dispose(); f.canvas.width = 1; });
+  faces.length = 0;
+  const S = Math.min(curDisc.S, MAXTEX), half = curDisc.paper / 2 - 5;
+  curDisc.centers.forEach(function (c) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const tex = new THREE.CanvasTexture(cv); tex.anisotropy = MAXANISO;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(curDisc.paper * MM, curDisc.paper * MM), new THREE.MeshLambertMaterial({ map: tex }));
+    mesh.position.set(c[0], c[1], 0); scene.add(mesh);
+    const pins = new THREE.Group();
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (p) { const m = new THREE.Mesh(pinGeo, pinMat); m.position.set(c[0] + p[0] * half * MM, c[1] + p[1] * half * MM, 0.005); pins.add(m); });
+    scene.add(pins);
+    faces.push({ center: c, canvas: cv, tex: tex, mesh: mesh, pins: pins, S: S });
+  });
+  buildStand(curDisc.boss[0], curDisc.boss[1]);
+  const indoor = key === 'indoor', sky = indoor ? 0x0e1620 : 0x9cc4e4;
+  envIn.visible = indoor; envOut.visible = !indoor; floorMesh.material.color.set(indoor ? 0x5b4b3a : 0x587a3c);
+  renderer.setClearColor(sky); if (lensRenderer) lensRenderer.setClearColor(sky);
+  $('#eyebrow').textContent = curDisc.label;
+}
+
+/* Zone agrandie (120 mm) centrée sur la flèche : même dessin, résolution élevée pour la loupe */
+function paintPatch(face, P, ax, ay) {
+  const g = patch.canvas.getContext('2d'), S = patch.S, px = S / 120, half = curDisc.paper / 2;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, S, S); g.save();
+  g.beginPath(); g.rect(S / 2 + (-half - ax) * px, S / 2 - (half - ay) * px, 2 * half * px, 2 * half * px); g.clip();
+  drawBase(g, S, px, ax, ay, curDisc); drawPrims(g, S, px, ax, ay, P, curDisc); g.restore();
+  patch.tex.needsUpdate = true; patch.mesh.position.set(face.center[0] + ax * MM, face.center[1] + ay * MM, 0.0006);
+}
 
 /* ---------- Flèches ---------- */
 const shaftMat = new THREE.MeshPhongMaterial({ color: 0x2b313a, specular: 0x666666, shininess: 70 });
@@ -250,8 +423,8 @@ const vaneMats = [new THREE.MeshLambertMaterial({ color: 0xe6e6e0, side: THREE.D
 const nockMat = new THREE.MeshPhongMaterial({ color: 0xf2c31b });
 const bandMat = new THREE.MeshPhongMaterial({ color: 0xd9261c });
 function makeArrow(Rmm, dir) {
-  const R = Rmm * MM, L = 0.62, g = new THREE.Group();
-  g.add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, L, 48).rotateX(Math.PI / 2).translate(0, 0, L / 2 - 0.06), shaftMat));
+  const R = Rmm * MM, L = 0.56, g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, L, 48).rotateX(Math.PI / 2).translate(0, 0, L / 2), shaftMat));
   g.add(new THREE.Mesh(new THREE.CylinderGeometry(R * 1.015, R * 1.015, 0.012, 48).rotateX(Math.PI / 2).translate(0, 0, 0.43), bandMat));
   [0, 120, 240].forEach(function (deg, i) {
     const vg = new THREE.Group();
@@ -282,11 +455,10 @@ function updateGoal() {
 }
 function tangentLeft() { const t = new V3(-Math.sin(thetaRad), Math.cos(thetaRad), 0); if (t.x > 0) t.negate(); return t; }
 const VIEWS = {
-  start: function () { return { pos: new V3(A3.x * 0.25, 1.38, 2.6), look: new V3(0, CENTER_Y, 0), name: 'Vue d’arrivée', hint: 'À 2,6 m de la cible. Glissez pour tourner, molette pour zoomer.' }; },
-  side: function () { const s = A3.x >= 0 ? 1 : -1; return { pos: new V3(A3.x + s * 0.9, A3.y + 0.06, 0.34), look: A3.clone(), name: 'Sur le côté de la cible', hint: 'Vous voyez l’inclinaison de la flèche sans gêner les autres.' }; },
+  start: function () { return { pos: new V3(A3.x * 0.25, 1.38, curDisc.camZ), look: new V3(0, CENTER_Y, 0), name: 'Vue d’arrivée', hint: 'Face à la cible. Glissez pour tourner, molette pour zoomer.' }; },
   front: function () { return { pos: A3.clone().add(new V3(0, 0, 0.5)), look: A3.clone(), name: 'De face, de près', hint: 'À 50 cm, face à la flèche. Attention : un tube penché peut masquer la ligne.' }; },
-  tanL: function () { return { pos: A3.clone().addScaledVector(tangentLeft(), 0.42).add(new V3(0, 0, 0.2)), look: A3.clone().add(new V3(0, 0, 0.004)), name: 'Tangente, à gauche', hint: 'Vous regardez dans l’axe de la ligne, côté gauche de la flèche.' }; },
-  tanR: function () { return { pos: A3.clone().addScaledVector(tangentLeft(), -0.42).add(new V3(0, 0, 0.2)), look: A3.clone().add(new V3(0, 0, 0.004)), name: 'Tangente, à droite', hint: 'Vous regardez dans l’axe de la ligne, côté droit de la flèche.' }; }
+  tanL: function () { return { pos: A3.clone().addScaledVector(tangentLeft(), 0.42).add(new V3(0, 0, 0.1)), look: A3.clone().add(new V3(0, 0, 0.004)), name: 'Côté gauche', hint: 'Vous regardez dans l’axe de la ligne, côté gauche de la flèche.' }; },
+  tanR: function () { return { pos: A3.clone().addScaledVector(tangentLeft(), -0.42).add(new V3(0, 0, 0.1)), look: A3.clone().add(new V3(0, 0, 0.004)), name: 'Côté droit', hint: 'Vous regardez dans l’axe de la ligne, côté droit de la flèche.' }; }
 };
 function setView(name, snap) {
   const v = VIEWS[name]();
@@ -295,32 +467,36 @@ function setView(name, snap) {
   if (snap) { curPos.copy(goalPos); curLook.copy(goalLook); }
   $('#view-name').textContent = v.name; $('#view-hint').textContent = v.hint;
 }
-let drag = null;
+function setEye(pos, snap) {
+  base.pos.copy(pos); base.look.copy(A3).add(new V3(0, 0, 0.004));
+  orbit.yaw = orbit.pitch = 0; orbit.zoom = 1; updateGoal();
+  if (snap) { curPos.copy(goalPos); curLook.copy(goalLook); }
+}
+let drag = null, lockOrbit = false;
 canvas.addEventListener('pointerdown', function (e) { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
 canvas.addEventListener('pointermove', function (e) {
-  if (!drag) return;
+  if (!drag || lockOrbit) return;
   orbit.yaw = Math.max(-1, Math.min(1, orbit.yaw - (e.clientX - drag.x) * 0.004));
   orbit.pitch = Math.max(-0.6, Math.min(0.6, orbit.pitch + (e.clientY - drag.y) * 0.004));
   drag = { x: e.clientX, y: e.clientY }; updateGoal();
 });
 canvas.addEventListener('pointerup', function () { drag = null; });
 canvas.addEventListener('pointercancel', function () { drag = null; });
-canvas.addEventListener('wheel', function (e) { e.preventDefault(); orbit.zoom = Math.max(0.45, Math.min(1.4, orbit.zoom * (e.deltaY > 0 ? 1.08 : 0.92))); updateGoal(); }, { passive: false });
+canvas.addEventListener('wheel', function (e) { e.preventDefault(); if (lockOrbit) return; orbit.zoom = Math.max(0.45, Math.min(1.4, orbit.zoom * (e.deltaY > 0 ? 1.08 : 0.92))); updateGoal(); }, { passive: false });
 
 /* ---------- Loupe (second rendu, caméra étroite braquée sur la flèche) ---------- */
 let lensOn = false, lensRenderer = null, lensSize = 300;
 const lensCam = new THREE.PerspectiveCamera(14, 1, 0.003, 5);
 function setLens(on) {
-  lensOn = on; lensWrap.style.display = on ? 'block' : 'none'; $('#lens-off').hidden = !on;
+  lensOn = on; lensWrap.style.display = on ? 'block' : 'none'; $('#lens-off').textContent = on ? 'Reposer la loupe' : 'Sortir la loupe';
   if (on && !lensRenderer) {
     try {
       lensRenderer = new THREE.WebGLRenderer({ canvas: $('#c-lens'), antialias: true });
       lensRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      lensRenderer.setClearColor(0x0e1620); lensRenderer.setSize(lensSize, lensSize, false);
+      lensRenderer.setClearColor(curDisc && curDisc.key === 'tae' ? 0x9cc4e4 : 0x0e1620); lensRenderer.setSize(lensSize, lensSize, false);
     } catch (e) { lensRenderer = null; }
   }
 }
-$('#lens-off').addEventListener('click', function () { setLens(false); });
 
 function resize() {
   const w = stageEl.clientWidth, h = stageEl.clientHeight;
@@ -338,6 +514,7 @@ function frame(t) {
   const k = 1 - Math.exp(-dt * 4.5);
   curPos.lerp(goalPos, k); curLook.lerp(goalLook, k);
   cam.position.copy(curPos); cam.lookAt(curLook);
+  cam.near = Math.min(0.2, Math.max(0.005, curPos.distanceTo(A3) * 0.04)); cam.updateProjectionMatrix();
   ring.visible = designated && !lensOn && viewName === 'start';
   if (ring.visible) { const s = 1 + 0.12 * Math.sin(t / 260); ring.scale.set(s, s, 1); }
   if (targetArrow && wiggle > 0.001) {
@@ -361,12 +538,11 @@ const ACTIONS = [
   { id: 'whistle', good: true, label: 'Enlever son sifflet', msg: 'Vous retirez votre sifflet.', why: 'Il ne doit pas se balancer devant le blason ni heurter la flèche.' },
   { id: 'remote', good: true, label: 'Enlever la télécommande du Chronotir', msg: 'Vous posez la télécommande du Chronotir.', why: 'Pas de déclenchement accidentel ni d’objet qui pend devant la cible.' },
   { id: 'designate', good: true, label: 'Demander à ce que la flèche soit désignée', msg: 'L’archer désigne la flèche en litige : un repère jaune apparaît autour d’elle.', why: 'Aucun doute sur la flèche que vous jugez.' },
-  { id: 'side', good: true, label: 'Se positionner sur le côté de la cible', msg: 'Vous vous placez sur le côté de la cible.', why: 'On ne gêne personne et on voit comment la flèche est inclinée.' },
   { id: 'front', good: false, label: 'Se rapprocher et regarder la flèche de face', msg: 'Vous vous approchez et regardez la flèche de face.', why: 'De face, un tube penché peut masquer la ligne : cette vue induit en erreur. Il faut se placer dans l’axe de la ligne.' },
   { id: 'whose', good: false, label: 'Demander à qui est la flèche', msg: 'L’archer : « C’est la mienne, la numéro 6. »', why: 'Peu importe à qui appartient la flèche : on la juge sans savoir qui l’a tirée.' },
-  { id: 'tanL', good: true, label: 'Se positionner à la tangente du cercle, à gauche de la flèche', msg: 'Vous vous placez dans l’axe de la ligne, à gauche de la flèche.', why: 'Vue dans l’axe de la ligne : on voit s’il reste un jour entre le tube et la ligne.' },
-  { id: 'tanR', good: true, label: 'Se positionner à la tangente du cercle, à droite de la flèche', msg: 'Vous vous placez dans l’axe de la ligne, à droite de la flèche.', why: 'Même contrôle depuis l’autre côté : les deux vues doivent donner la même réponse.' },
-  { id: 'loupe', good: true, label: 'Regarder avec la loupe', msg: 'Vous sortez la loupe. Glissez pour changer d’angle.', why: 'La loupe confirme ce que l’œil voit depuis la tangente.' },
+  { id: 'tanL', good: true, label: 'Se mettre sur le côté gauche', msg: 'Vous vous mettez sur le côté gauche de la cible et visez dans l’axe de la ligne.', why: 'Vue dans l’axe de la ligne : on voit s’il reste un jour entre le tube et la ligne.' },
+  { id: 'tanR', good: true, label: 'Se mettre sur le côté droit', msg: 'Vous vous mettez sur le côté droit de la cible et visez dans l’axe de la ligne.', why: 'Même contrôle depuis l’autre côté : les deux vues doivent donner la même réponse.' },
+  { id: 'loupe', good: true, hidden: true, label: 'Regarder avec la loupe', msg: 'Vous sortez la loupe. Glissez pour changer d’angle.', why: 'La loupe confirme ce que l’œil voit depuis la tangente.' },
   { id: 'touch', good: false, label: 'Toucher la flèche pour vérifier qu’elle est bien fichée', msg: 'Vous touchez la flèche : elle bouge sous votre doigt.', why: 'Toucher la flèche en litige modifie la preuve (II.02, B.6.2.1).' },
   { id: 'pull', good: false, label: 'Retirer la flèche pour regarder le trou', msg: 'Vous retirez la flèche : il ne reste que le trou, la position du tube est perdue.', why: 'Une flèche retirée ne peut plus être jugée.' },
   { id: 'ask', good: false, label: 'Demander son avis à l’archer', msg: 'L’archer : « Elle touche la ligne, c’est évident ! »', why: 'La décision appartient à l’arbitre seul, jamais à l’archer concerné.' },
@@ -374,10 +550,11 @@ const ACTIONS = [
 ];
 const BY = {}; ACTIONS.forEach(function (a) { BY[a.id] = a; });
 const REQ = ACTIONS.filter(function (a) { return a.good && !a.optional; }).map(function (a) { return a.id; });
-const LOOKS = ['side', 'tanL', 'tanR', 'loupe'];
+const LOOKS = ['tanL', 'tanR', 'loupe'];
 const PREREQ = ['scores', 'designate', 'cap', 'whistle', 'remote'];
 const SHORT = { scores: 'vérifié les scores des autres flèches', designate: 'fait désigner la flèche', cap: 'retiré votre casquette', whistle: 'retiré votre sifflet', remote: 'retiré la télécommande du Chronotir' };
-const LEVELS = { easy: [1.2, 2.4], normal: [0.4, 1.2], hard: [0.12, 0.4] };
+const LEVELS = { easy: [0.4, 0.9], normal: [0.15, 0.45], hard: [0.04, 0.15] };   /* l'arbitre n'est appelé que si la flèche est très près de la ligne */
+const LINES = { l8: { f: 1, lo: 8, hi: 9, name: '8 / 9' }, l9: { f: 0.5, lo: 9, hi: 10, name: '9 / 10' }, lX: { f: 0.25, lo: 10, hi: 'X', name: '10 / X' } };
 const PHRASES = [
   { id: 'think', text: function (s) { return 'Je pense qu’elle est ' + s; }, pts: 3, tip: 'Formule hésitante : elle ouvre la discussion.' },
   { id: 'believe', text: function (s) { return 'Je crois qu’elle est ' + s; }, pts: 3, tip: 'Formule hésitante : elle ouvre la discussion.' },
@@ -386,7 +563,7 @@ const PHRASES = [
 ];
 const fmt = function (x) { return x.toFixed(2).replace('.', ','); };
 const history = [];
-let S = null, ann = { score: null, phrase: null };
+let CUR = null, S = null, AL = null, ann = { score: null, phrase: null };
 const el = { actions: $('#actions'), va: $('#view-actions'), vn: $('#view-announce'), vr: $('#view-result'), btnA: $('#btn-announce'), foot: $('#ann-foot'), btnV: $('#btn-validate'), btnN: $('#btn-next'), toast: $('#toast'), bubble: $('#bubble'), body: $('#pbody'), coach: $('#coach') };
 let toastTimer = 0;
 function toast(text, kind) {
@@ -394,6 +571,7 @@ function toast(text, kind) {
   clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.toast.hidden = true; }, 4200);
 }
 function showPanel(which) {
+  $('#view-align').hidden = which !== 'align'; $('#pf').hidden = which === 'align';
   el.va.hidden = which !== 'actions'; el.vn.hidden = which !== 'announce'; el.vr.hidden = which !== 'result';
   el.btnA.hidden = which !== 'actions';
   el.foot.hidden = which !== 'announce'; el.foot.style.display = which === 'announce' ? 'flex' : 'none';
@@ -403,39 +581,63 @@ function showPanel(which) {
 /* ---------- Nouvelle flèche ---------- */
 function newRound() {
   const lv = LEVELS[$('#level').value];
+  setupDiscipline($('#disc').value);
+  const sp = curDisc, K = sp.ZR / 40, tae = sp.key === 'tae';
   const Rmm = pick([2.75, 3.0, 3.25]);
   const touches = Math.random() < 0.5;
   const c = (touches ? -1 : 1) * rand(lv[0], lv[1]);          /* écart réel tube / ligne, en mm */
-  const d = 40 + LINE_W / 2 + Rmm + c;                          /* distance du centre du tube au centre du blason */
-  thetaRad = (Math.random() < 0.5 ? rand(35, 145) : rand(215, 325)) * Math.PI / 180;
+  const lk = $('#line').value === 'mix' ? (function () { const q = Math.random(); return q < 0.25 ? 'l8' : q < 0.7 ? 'l9' : 'lX'; })() : $('#line').value, LN = LINES[lk], Rl = sp.ZR * LN.f;
+  const side = 1;                                               /* la flèche est toujours à l'extérieur de la ligne (zone de valeur inférieure) et frôle le cordon du côté de la zone supérieure */
+  const d = Rl + side * (LINE_W / 2 + Rmm + c);                 /* distance du centre du tube au centre du blason */
+  thetaRad = (Math.random() < 0.5 ? rand(49, 131) : rand(229, 311)) * Math.PI / 180;
   const ux = Math.cos(thetaRad), uy = Math.sin(thetaRad);
-  A3.set(d * ux * MM, CENTER_Y + d * uy * MM, 0);
+  const fi = Math.floor(Math.random() * faces.length), fc = faces[fi].center;
+  A3.set(fc[0] + d * ux * MM, fc[1] + d * uy * MM, 0);
+  const wm = $('#wear').value;
+  const lvl = wm === 'new' ? 0 : wm === 'worn' ? 1 : wm === 'riddled' ? 2 : Math.floor(Math.random() * 3), worn = lvl > 0;
+  let wearInfo = { erased: false, near: false };
+  faces.forEach(function (f, i) {
+    const w = genWear(lvl, sp, i === fi ? { x: d * ux, y: d * uy, rl: Rl } : null);
+    renderFace(f.canvas, f.S, f.S / sp.paper, 0, 0, sp, w.P); f.tex.needsUpdate = true;
+    if (i === fi) { wearInfo = w.info; paintPatch(f, w.P, d * ux, d * uy); CUR = { f: f, P: w.P, ax: d * ux, ay: d * uy }; }
+  });
   arrowsGroup.clear();
   /* autres flèches : à l'écart des lignes de vue de l'arbitre */
-  const pts = [];
-  for (let tries = 0; pts.length < 5 && tries < 800; tries++) {
-    const r = rand(15, 185), a = rand(0, Math.PI * 2), x = r * Math.cos(a), y = r * Math.sin(a);
-    const dx = x - d * ux, dy = y - d * uy;
-    if (Math.hypot(dx, dy) < 55 || Math.abs(dx * ux + dy * uy) < 30 || Math.abs(dy) < 30) continue;
-    if (pts.some(function (p) { return Math.hypot(p.x - x, p.y - y) < 30; })) continue;
-    pts.push({ x: x, y: y });
-  }
-  pts.forEach(function (p) {
-    const phi = rand(3, 8) * Math.PI / 180, al = rand(0, Math.PI * 2), t = Math.tan(phi);
-    const ar = makeArrow(Rmm, new V3(Math.cos(al) * t, Math.sin(al) * t, 1));
-    ar.position.set(p.x * MM, CENTER_Y + p.y * MM, 0); arrowsGroup.add(ar);
+  const t = tangentLeft(), band = tae ? 40 : 25, perFace = tae ? 24 : 3, pts = [];
+  /* Les flèches tombent dans les hautes zones : 18 m surtout 10 et 9, 8 exceptionnellement ; TAE de 10 à 7 */
+  const rMax0 = tae ? 4 * sp.ZR / 2 : sp.ZR;                    /* TAE : jusqu'à la zone 7 (244 mm) ; 18 m : zone 9 (40 mm) */
+  faces.forEach(function (f, i) {
+    let n = 0; const want = perFace - (i === fi ? 1 : 0);
+    for (let tries = 0; n < want && tries < 2500; tries++) {
+      const rMax = (tae ? rMax0 : (Math.random() < 0.08 ? 1.5 * sp.ZR : rMax0)) * (tries > 800 ? 1.4 : 1);
+      const r = Math.max(tae ? 10 : 4, rMax * (tae ? Math.random() : Math.sqrt(Math.random()))), a = rand(0, Math.PI * 2);
+      if (LINE_K.some(function (k) { return Math.abs(r - k * sp.ZR / 2) < Rmm + LINE_W / 2 + 1.5; })) continue;   /* aucune autre flèche près d'une ligne : elles sont clairement d'un côté ou de l'autre */
+      const wx = f.center[0] + r * Math.cos(a) * MM, wy = f.center[1] + r * Math.sin(a) * MM;
+      const dx = (wx - A3.x) / MM, dy = (wy - A3.y) / MM;
+      if (Math.hypot(dx, dy) < (tae ? 60 : 45)) continue;
+      if (Math.abs(dx * t.y - dy * t.x) < band && Math.abs(dx * t.x + dy * t.y) < 600) continue;
+      if (Math.abs(dy) < band && Math.abs(dx) < 600) continue;
+      if (pts.some(function (p) { return Math.hypot(p.x - wx, p.y - wy) < (tae ? 40 : 20) * MM; })) continue;
+      pts.push({ x: wx, y: wy }); n++;
+    }
   });
-  const phi = rand(5, 9) * Math.PI / 180, t = Math.tan(phi);
+  pts.forEach(function (p) {
+    const phi = rand(3, 8) * Math.PI / 180, al = rand(0, Math.PI * 2), tt = Math.tan(phi);
+    const ar = makeArrow(Rmm, new V3(Math.cos(al) * tt, Math.sin(al) * tt, 1));
+    ar.position.set(p.x, p.y, 0); arrowsGroup.add(ar);
+  });
+  const phi = rand(5, 9) * Math.PI / 180, tn = Math.tan(phi);
   let tx, ty;
-  if (Math.random() < 0.6) { tx = -ux * t; ty = -uy * t; }      /* penche vers le centre : masque la ligne vue de face */
-  else { const al = rand(0, Math.PI * 2); tx = Math.cos(al) * t; ty = Math.sin(al) * t; }
+  if (Math.random() < 0.6) { tx = -side * ux * tn; ty = -side * uy * tn; }      /* penche vers le centre : masque la ligne vue de face */
+  else { const al = rand(0, Math.PI * 2); tx = Math.cos(al) * tn; ty = Math.sin(al) * tn; }
   targetArrow = makeArrow(Rmm, new V3(tx, ty, 1));
   targetArrow.position.copy(A3); arrowsGroup.add(targetArrow);
   baseQuat = targetArrow.quaternion.clone(); wiggle = 0;
   hole.geometry.dispose(); hole.geometry = new THREE.CircleGeometry(Rmm * MM, 32);
   hole.position.set(A3.x, A3.y, 0.0008); hole.visible = false;
   ring.position.set(A3.x, A3.y, 0.004); designated = false; setLens(false);
-  S = { Rmm: Rmm, c: c, touches: touches, truth: touches ? 9 : 8, done: new Set(), order: [], wrong: [], finished: false, lookStarted: false, missingAtLook: [], gear: { cap: true, whistle: true, remote: true } };
+  AL = null; lockOrbit = false;
+  S = { side: side, worn: worn, erased: wearInfo.erased, nearHole: wearInfo.near, alignFails: 0, Rmm: Rmm, c: c, touches: touches, line: LN, unreadable: wearInfo.unreadable, lineHoles: wearInfo.lineHoles, truth: (touches || wearInfo.unreadable) ? LN.hi : LN.lo, done: new Set(), order: [], wrong: [], finished: false, lookStarted: false, missingAtLook: [], gear: { cap: true, whistle: true, remote: true } };
   ann = { score: null, phrase: null };
   document.querySelectorAll('.chip').forEach(function (n) { n.classList.remove('off'); });
   el.bubble.hidden = true; el.toast.hidden = true;
@@ -444,7 +646,7 @@ function newRound() {
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 function buildActions() {
   el.actions.innerHTML = '';
-  shuffle(ACTIONS.slice()).forEach(function (a) {
+  shuffle(ACTIONS.filter(function (a) { return !a.hidden; })).forEach(function (a) {
     const li = document.createElement('li'), b = document.createElement('button');
     b.className = 'act'; b.dataset.id = a.id; b.innerHTML = '<span class="mark"></span><span>' + a.label + '</span>';
     b.addEventListener('click', function () { doAction(a.id); });
@@ -474,6 +676,7 @@ function updateStats() {
 /* ---------- Actions ---------- */
 function doAction(id) {
   if (!S || S.finished) return;
+  if (id === 'tanL' || id === 'tanR') { startAlign(id); return; }
   const a = BY[id], first = !S.done.has(id) && S.wrong.indexOf(id) < 0;
   if (first) { S.order.push(id); if (a.good) S.done.add(id); else S.wrong.push(id); }
   const coach = el.coach.checked;
@@ -486,18 +689,63 @@ function doAction(id) {
   if (id === 'cap' || id === 'whistle' || id === 'remote') { S.gear[id] = false; document.querySelector('[data-gear="' + id + '"]').classList.add('off'); }
   if (id === 'designate') designated = true;
   if (id === 'side' || id === 'front' || id === 'tanL' || id === 'tanR') setView(id);
-  if (id === 'loupe') setLens(!lensOn || first);
+  if (id === 'loupe') setLens(!lensOn);
   if (id === 'touch') wiggle = 1;
   if (id === 'pull') { targetArrow.visible = false; hole.visible = true; }
   if (first || LOOKS.indexOf(id) < 0) toast(coach ? (a.good ? '✓ ' : '✕ ') + a.msg + ' ' + a.why + warn : a.msg, coach ? (warn || !a.good ? 'bad' : 'good') : '');
   paintMarks();
 }
 
+/* ---------- Alignement sur la tangente : se baisser ou se lever, puis valider ---------- */
+const TOL = 10, slider = $('#eye');
+function eyePos(y, sx) { return new V3(A3.x + sx * 0.40, y, 0.10); }
+function idealEye(sx) { const t = tangentLeft(); return A3.y + sx * 0.40 * (t.y / t.x); }
+function alignError(y, sx) {
+  const t = tangentLeft(), vx = -sx * 0.40, vy = A3.y - y;
+  return Math.acos(Math.min(1, Math.abs(vx * t.x + vy * t.y) / (Math.hypot(vx, vy) * Math.hypot(t.x, t.y)))) * 180 / Math.PI;
+}
+function updateAlignUI() {
+  const y = +slider.value;
+  $('#eye-val').textContent = 'Yeux à ' + fmt(y) + ' m';
+  $('#eye-gauge').textContent = el.coach.checked ? 'Écart : ' + Math.round(alignError(y, AL.sx)) + '° (tolérance ' + TOL + '°)' : '';
+}
+function startAlign(id) {
+  let warn = '';
+  if (!S.lookStarted) {
+    S.lookStarted = true;
+    S.missingAtLook = PREREQ.filter(function (p) { return !S.done.has(p); });
+    if (el.coach.checked && S.missingAtLook.length) warn = 'Attention, vous vous placez avant d’avoir ' + S.missingAtLook.map(function (p) { return SHORT[p]; }).join(', ') + '.';
+  }
+  AL = { id: id, sx: id === 'tanL' ? -1 : 1 };
+  lockOrbit = true; slider.value = 1.6; viewName = 'align';
+  setEye(eyePos(1.6, AL.sx), false);
+  $('#view-name').textContent = id === 'tanL' ? 'Côté gauche' : 'Côté droit';
+  $('#view-hint').textContent = 'Choisissez votre hauteur d’yeux pour regarder dans l’axe de la ligne.';
+  $('#align-title').textContent = id === 'tanL' ? 'Côté gauche de la cible' : 'Côté droit de la cible';
+  showPanel('align'); updateAlignUI();
+  if (warn) toast(warn, 'bad');
+}
+slider.addEventListener('input', function () { if (!AL) return; setEye(eyePos(+slider.value, AL.sx), true); updateAlignUI(); });
+$('#align-cancel').addEventListener('click', function () { AL = null; lockOrbit = false; setView('start'); showPanel('actions'); });
+$('#align-ok').addEventListener('click', function () {
+  if (!AL) return;
+  const y = +slider.value, id = AL.id, a = BY[id], coach = el.coach.checked;
+  if (alignError(y, AL.sx) > TOL) {
+    S.alignFails++;
+    toast('Pas dans l’axe de la ligne : vous êtes trop ' + (y > idealEye(AL.sx) ? 'haut, baissez-vous.' : 'bas, levez-vous.') + ' (−2 points)', 'bad');
+    return;
+  }
+  if (!S.done.has(id)) { S.done.add(id); S.order.push(id); }
+  AL = null; lockOrbit = false; setView(id);                   /* l'arbitre se cale exactement sur la tangente */
+  showPanel('actions'); paintMarks();
+  toast(coach ? '✓ ' + a.msg + ' ' + a.why : a.msg, coach ? 'good' : '');
+});
+
 /* ---------- Annonce du score ---------- */
 function buildAnnounce() {
   const so = $('#score-opts'); so.innerHTML = '';
-  [7, 8, 9, 10].forEach(function (v) {
-    const b = document.createElement('button'); b.className = 'sc'; b.textContent = v; b.setAttribute('aria-pressed', 'false');
+  [7, 8, 9, 10, 'X'].forEach(function (v) {
+    const b = document.createElement('button'); b.className = 'sc'; b.textContent = v; b.dataset.v = String(v); b.setAttribute('aria-pressed', 'false');
     b.addEventListener('click', function () { ann.score = v; paintAnnounce(); }); so.appendChild(b);
   });
   const po = $('#phrase-opts'); po.innerHTML = '';
@@ -510,7 +758,7 @@ function buildAnnounce() {
   paintAnnounce();
 }
 function paintAnnounce() {
-  document.querySelectorAll('.sc').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.textContent === ann.score)); });
+  document.querySelectorAll('.sc').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.v === String(ann.score))); });
   document.querySelectorAll('.ph-btn').forEach(function (b) {
     const p = PHRASES.filter(function (x) { return x.id === b.dataset.id; })[0];
     b.textContent = '« ' + p.text(ann.score === null ? '…' : ann.score) + ' »'; b.setAttribute('aria-pressed', String(ann.phrase === p.id));
@@ -521,8 +769,12 @@ el.btnA.addEventListener('click', function () { if (!S.finished) { buildAnnounce
 $('#btn-back').addEventListener('click', function () { showPanel('actions'); });
 el.btnV.addEventListener('click', validate);
 el.btnN.addEventListener('click', newRound);
-el.coach.addEventListener('change', function () { paintMarks(); });
+el.coach.addEventListener('change', function () { paintMarks(); if (AL) updateAlignUI(); });
 $('#level').addEventListener('change', newRound);
+$('#wear').addEventListener('change', newRound);
+$('#disc').addEventListener('change', newRound);
+$('#line').addEventListener('change', newRound);
+$('#lens-off').addEventListener('click', function () { if (!S) return; if (S.finished) setLens(!lensOn); else doAction('loupe'); });
 
 function validate() {
   S.finished = true;
@@ -530,31 +782,41 @@ function validate() {
   el.bubble.textContent = '« ' + ph.text(ann.score) + ' »'; el.bubble.hidden = false;
   const done = REQ.filter(function (id) { return S.done.has(id); }), missed = REQ.filter(function (id) { return !S.done.has(id); });
   const nPre = PREREQ.filter(function (id) { return S.done.has(id); }).length;
-  const nLook = ['side', 'tanL', 'tanR', 'loupe'].filter(function (id) { return S.done.has(id); }).length;
+  const lookPts = (S.done.has('tanL') ? 7 : 0) + (S.done.has('tanR') ? 7 : 0) + (S.done.has('loupe') ? 6 : 0);
+  const alignPen = Math.min(6, 2 * S.alignFails);
   const orderPenalty = S.missingAtLook.length ? 10 : 0;
-  const proc = Math.max(0, Math.min(50, nPre * 6 + nLook * 5 - orderPenalty - 8 * S.wrong.length));
+  const proc = Math.max(0, Math.min(50, nPre * 6 + lookPts - orderPenalty - alignPen - 8 * S.wrong.length));
   const dec = ann.score === S.truth ? 40 : 0;
   const total = proc + dec + ph.pts;
   history.push(total); updateStats();
   setView('tanR'); setLens(true);
-  renderResult({ ph: ph, done: done, missed: missed, proc: proc, dec: dec, total: total });
+  if (CUR) { revealHoles = true; renderFace(CUR.f.canvas, CUR.f.S, CUR.f.S / curDisc.paper, 0, 0, curDisc, CUR.P); CUR.f.tex.needsUpdate = true; paintPatch(CUR.f, CUR.P, CUR.ax, CUR.ay); revealHoles = false; }
+  renderResult({ ph: ph, done: done, missed: missed, alignPen: alignPen, proc: proc, dec: dec, total: total });
   showPanel('result');
 }
 function renderResult(r) {
   const c = S.c, ok = ann.score === S.truth;
-  const expl = S.touches
-    ? 'Le tube recouvre la ligne de ' + fmt(-c) + ' mm : il la touche, la flèche prend la valeur supérieure. Score réel : 9.'
-    : 'Il reste ' + fmt(c) + ' mm entre le tube et la ligne : la flèche est restée dans le rouge. Score réel : 8.';
-  const lim = Math.abs(c) < 0.3 ? ' Cas limite : seule une vue tangente avec la loupe permet de trancher.' : '';
+  const nm = S.line.name, hi = S.line.hi, lo = S.line.lo;
+  const where = S.side < 0 ? 'par l’intérieur' : 'par l’extérieur';
+  const expl = S.unreadable
+    ? 'Un trou noir recouvre la ligne ' + nm + ' à l’endroit du contact : le blason est trop abîmé pour juger. Le doute profite à l’archer : valeur haute. Score réel : ' + hi + '. (Sans ce trou, l’écart tube / ligne aurait été de ' + fmt(c) + ' mm.)'
+    : S.touches
+      ? 'Ligne ' + nm + ' : le tube la recouvre de ' + fmt(-c) + ' mm (' + where + ') : il la touche, la flèche prend la valeur supérieure. Score réel : ' + hi + '.'
+      : 'Ligne ' + nm + ' : il reste ' + fmt(c) + ' mm entre le tube et la ligne (' + where + ') : la flèche ne la touche pas. Score réel : ' + lo + '.';
+  const lim = !S.unreadable && Math.abs(c) < 0.3 ? ' Cas limite : seule une vue tangente avec la loupe permet de trancher.' : '';
+  const wornNote = S.erased ? ' La ligne était effacée d’un côté de la flèche : il fallait la prolonger à partir de la partie intacte.' : '';
+  const lineNote = S.lineHoles && !S.unreadable ? ' Des trous noirs sur la ligne gênaient la lecture : il fallait la reconstituer par un arc de cercle imaginaire (II.02, B.6.2.3).' : '';
+  const holeNote = S.nearHole ? ' D’anciens impacts se trouvent juste à côté de la flèche : il ne faut pas les confondre avec le tube.' : '';
   const label = !ok ? 'Mauvaise décision' : r.total >= 90 ? 'Cordon jugé dans les règles' : r.total >= 70 ? 'Bonne décision, procédure à affiner' : 'Bonne décision, procédure incomplète';
   let h = '<div class="verdict ' + (ok ? 'good' : 'bad') + '"><div class="tot">' + r.total + '<small> / 100</small></div><div class="lab">' + label + '</div></div>';
-  h += '<div class="expl"><b>Vous avez annoncé ' + ann.score + '.</b> ' + expl + lim + ' <span style="color:var(--ink-2)">(tube de ' + fmt(S.Rmm * 2) + ' mm, ligne de ' + fmt(LINE_W) + ' mm)</span></div>';
+  h += '<div class="expl"><b>Vous avez annoncé ' + ann.score + '.</b> ' + expl + lim + wornNote + lineNote + holeNote +' <span style="color:var(--ink-2)">(tube de ' + fmt(S.Rmm * 2) + ' mm, ligne de ' + fmt(LINE_W) + ' mm)</span></div>';
   h += '<div class="row"><span>Procédure</span><b>' + r.proc + ' / 50</b></div><div class="row"><span>Décision</span><b>' + r.dec + ' / 40</b></div><div class="row"><span>Formulation</span><b>' + r.ph.pts + ' / 10</b></div>';
   h += '<p class="note"><b>« ' + r.ph.text(ann.score) + ' »</b> : ' + r.ph.tip + ' Conseil de formation à valider avec vos formateurs.</p>';
   h += '<h2>Procédure</h2><ul>';
   r.done.forEach(function (id) { h += '<li class="ok">' + BY[id].label + '</li>'; });
   r.missed.forEach(function (id) { h += '<li class="miss">Oublié : ' + BY[id].label + '<small>' + BY[id].why + '</small></li>'; });
   S.wrong.forEach(function (id) { h += '<li class="ko">À éviter : ' + BY[id].label + '<small>' + BY[id].why + '</small></li>'; });
+  if (S.alignFails) h += '<li class="ko">Alignement (−' + r.alignPen + ')<small>' + S.alignFails + ' validation(s) hors de l’axe de la ligne : il faut viser la tangente à quelques degrés près.</small></li>';
   if (S.missingAtLook.length) h += '<li class="ko">Ordre (−10)<small>Vous vous êtes placé avant d’avoir ' + S.missingAtLook.map(function (p) { return SHORT[p]; }).join(', ') + '. Scores relevés, flèche désignée et accessoires retirés viennent toujours avant le placement.</small></li>';
   h += '</ul>';
   el.vr.innerHTML = h;
@@ -562,5 +824,4 @@ function renderResult(r) {
 newRound();
 })();
 </script>
-</body>
-</html>
+</body></html>
