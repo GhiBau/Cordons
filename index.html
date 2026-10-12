@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Serious game 3D pour former les arbitres de tir à l’arc au jugement de cordon.">
+<title>Jugement de Cordon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* Concept : une salle de tir sombre en 3D à gauche, une feuille de marque papier à droite.
+   Le rouge du blason sert d'accent, le jaune du blason de repère. Un seul univers visuel, volontairement fixe. */
+:root{
+  --hall:#0e1620; --hall-2:#17212d;
+  --paper:#eceee7; --paper-2:#f7f8f3; --rule:#c5cabf;
+  --ink:#141a22; --ink-2:#4c5766;
+  --red:#c4202b; --red-d:#9d1821; --gold:#f2c31b;
+  --ok:#1d7a4b; --ko:#b3261e;
+  --f-display:'Barlow Condensed','Arial Narrow',sans-serif;
+  --f-body:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+html{box-sizing:border-box;height:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{height:100%;margin:0;background:var(--hall);color:var(--ink);font:500 15px/1.4 var(--f-body);overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+#app{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 400px}
+#stage{position:relative;min-height:0;min-width:0;overflow:hidden;background:var(--hall);touch-action:none}
+#c3d{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}
+#c3d:active{cursor:grabbing}
+#nogl{position:absolute;inset:0;display:grid;place-items:center;padding:24px;color:#e9eef3;text-align:center}
+
+.hud{position:absolute;z-index:3;background:rgba(10,16,24,.76);color:#e9eef3;padding:8px 12px;border-left:3px solid var(--gold);font-size:13px;max-width:min(430px,calc(100% - 32px))}
+#hud-view{left:16px;top:16px}
+#hud-view b{display:block;font:700 21px/1.1 var(--f-display);letter-spacing:.05em;text-transform:uppercase}
+#hud-view span{color:#b9c5d1}
+#hud-stats{right:16px;top:16px;text-align:right;border-left:0;border-right:3px solid var(--gold);font:500 12px/1.5 var(--f-mono)}
+#hud-gear{left:16px;bottom:16px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:6px 10px}
+#hud-gear em{font-style:normal;color:#b9c5d1;margin-right:4px}
+.chip{border:1px solid #4a5a6c;padding:2px 8px;font-size:12px;letter-spacing:.03em}
+.chip.off{text-decoration:line-through;opacity:.4}
+
+#toast{position:absolute;z-index:4;left:50%;top:84px;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));padding:10px 14px;background:#f4f5ef;color:var(--ink);font-weight:600;border-left:5px solid var(--ink-2);box-shadow:0 6px 20px rgba(0,0,0,.35)}
+#toast.good{border-color:var(--ok)}
+#toast.bad{border-color:var(--ko)}
+#bubble{position:absolute;z-index:4;left:50%;bottom:64px;transform:translateX(-50%);max-width:min(620px,calc(100% - 32px));padding:12px 20px;background:#fff;color:var(--ink);font:700 clamp(22px,4vw,34px)/1.15 var(--f-display);letter-spacing:.02em;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+
+#lens-wrap{position:absolute;z-index:2;left:50%;top:50%;transform:translate(-50%,-50%);display:none;pointer-events:none}
+#lens-wrap canvas{width:100%;height:100%;display:block;border-radius:50%;border:7px solid #272d36;box-shadow:0 0 0 3px #8a919b,0 18px 50px rgba(0,0,0,.55),inset 0 0 40px rgba(0,0,0,.35)}
+#lens-wrap::before{content:"";position:absolute;inset:7px;border-radius:50%;background:linear-gradient(135deg,rgba(255,255,255,.22),rgba(255,255,255,0) 38%);z-index:1}
+#lens-wrap::after{content:"";position:absolute;left:84%;top:84%;width:18px;height:34%;border-radius:4px;background:linear-gradient(90deg,#4a3422,#7a5a3a,#4a3422);transform-origin:top center;transform:rotate(-45deg);z-index:-1}
+#lens-off{position:absolute;z-index:4;right:16px;bottom:16px;background:var(--paper);border:0;padding:9px 14px;font:700 15px var(--f-display);letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+
+#panel{min-height:0;min-width:0;display:flex;flex-direction:column;background:var(--paper);border-left:4px solid var(--red)}
+.ph{padding:16px 20px 12px;border-bottom:1px solid var(--rule)}
+.eyebrow{margin:0;font:600 12px/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;color:var(--red)}
+h1{margin:6px 0 10px;font:700 36px/1 var(--f-display);text-transform:uppercase;letter-spacing:.015em;text-wrap:balance}
+.opts{display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--ink-2)}
+.opts select{background:var(--paper-2);border:1px solid var(--rule);padding:3px 6px}
+.opts label{display:flex;gap:6px;align-items:center}
+.pb{flex:1;min-height:0;overflow-y:auto;padding:14px 20px 18px}
+h2{margin:14px 0 8px;font:700 15px/1 var(--f-display);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);display:flex;gap:10px;align-items:center}
+h2::after{content:"";flex:1;height:1px;background:var(--rule)}
+h2:first-child{margin-top:0}
+ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.act{width:100%;display:flex;gap:12px;align-items:flex-start;text-align:left;background:var(--paper-2);border:1px solid var(--rule);padding:10px 12px;cursor:pointer;min-height:44px}
+.act:hover:not(:disabled){border-color:var(--ink-2);background:#fff}
+.act:disabled{cursor:default;color:var(--ink-2)}
+.mark{flex:none;width:20px;height:20px;border:1.5px solid var(--ink-2);display:grid;place-items:center;font:700 14px/1 var(--f-body);margin-top:1px}
+.act.done .mark{background:var(--ink-2);border-color:var(--ink-2);color:#fff}
+.act.done .mark::before{content:"\2713"}
+.act.coach.ok .mark{background:var(--ok);border-color:var(--ok)}
+.act.coach.ko .mark{background:var(--ko);border-color:var(--ko)}
+.act.coach.ko .mark::before{content:"\2715"}
+.pf{padding:12px 20px calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--rule);background:var(--paper-2)}
+.big{width:100%;border:0;cursor:pointer;background:var(--red);color:#fff;padding:14px 16px;font:700 26px/1 var(--f-display);letter-spacing:.07em;text-transform:uppercase}
+.big:hover:not(:disabled){background:var(--red-d)}
+.big:disabled{background:#a5a99f;cursor:default}
+.btn2{border:1px solid var(--ink);background:transparent;padding:10px 14px;cursor:pointer;font-weight:600}
+.btn2:hover{background:#fff}
+.btn-ink{border:0;background:var(--ink);color:#fff;padding:13px 16px;cursor:pointer;font:700 22px/1 var(--f-display);letter-spacing:.07em;text-transform:uppercase;width:100%}
+.btn-ink:disabled{background:#a5a99f;cursor:default}
+
+.scores{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.sc{border:1px solid var(--rule);background:var(--paper-2);padding:10px 0;cursor:pointer;font:700 40px/1 var(--f-display)}
+.sc[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.ph-btn{width:100%;text-align:left;border:1px solid var(--rule);background:var(--paper-2);padding:12px;cursor:pointer;font:600 18px/1.2 var(--f-body)}
+.ph-btn[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.note{font-size:13px;color:var(--ink-2);margin:10px 0 0}
+
+.verdict{display:flex;justify-content:space-between;gap:12px;align-items:flex-end;border-bottom:3px solid var(--ink);padding-bottom:10px}
+.verdict .tot{font:700 64px/0.9 var(--f-display)}
+.verdict .tot small{font-size:24px;color:var(--ink-2)}
+.verdict .lab{font:700 22px/1.05 var(--f-display);text-transform:uppercase;letter-spacing:.03em;text-align:right;max-width:55%}
+.verdict.good .lab{color:var(--ok)}
+.verdict.bad .lab{color:var(--ko)}
+.row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--rule);font-size:14px}
+.row b{font-family:var(--f-mono);font-weight:500}
+.expl{margin:10px 0;padding:10px 12px;background:#fff;border-left:4px solid var(--gold);font-size:14px}
+.res li{font-size:14px;padding:6px 0 6px 26px;position:relative;border-bottom:1px solid var(--rule)}
+.res li::before{position:absolute;left:0;top:6px;font-weight:700}
+.res li.ok::before{content:"\2713";color:var(--ok)}
+.res li.miss::before{content:"\25CB";color:var(--ko)}
+.res li.ko::before{content:"\2715";color:var(--ko)}
+.res li small{display:block;color:var(--ink-2);margin-top:2px}
+
+@media (max-width:860px){
+  #app{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,44%) minmax(0,1fr)}
+  #panel{border-left:0;border-top:4px solid var(--red)}
+  h1{font-size:28px;margin-bottom:6px}
+  .ph{padding:10px 16px 8px}
+  .pb{padding:12px 16px 14px}
+  .pf{padding-inline:16px}
+  .big{font-size:22px;padding:11px}
+  #hud-view{font-size:12px;padding:6px 10px}
+  #hud-view b{font-size:17px}
+  #hud-stats{display:none}
+  #bubble{bottom:52px}
+  #toast{top:70px}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="stage">
+    <canvas id="c3d" aria-label="Scène 3D : cible de tir à l’arc avec une flèche en cordon"></canvas>
+    <div id="nogl" hidden><p>Votre navigateur ne permet pas l’affichage 3D (WebGL). Essayez Chrome, Edge ou Firefox récents.</p></div>
+    <div id="lens-wrap"><canvas id="c-lens"></canvas></div>
+    <div class="hud" id="hud-view"><b id="view-name">Vue d’arrivée</b><span id="view-hint"></span></div>
+    <div class="hud" id="hud-stats"><span id="stat-n">Flèche 1</span><br><span id="stat-avg">Pas encore de moyenne</span></div>
+    <div class="hud" id="hud-gear"><em>Sur vous</em><span class="chip" data-gear="cap">Casquette</span><span class="chip" data-gear="whistle">Sifflet</span><span class="chip" data-gear="remote">Télécommande Chronotir</span></div>
+    <div id="toast" hidden></div>
+    <div id="bubble" hidden></div>
+    <button id="lens-off" hidden>Reposer la loupe</button>
+  </div>
+
+  <aside id="panel">
+    <header class="ph">
+      <p class="eyebrow">Arbitrage · Tir à 18 m · Blason de 40 cm</p>
+      <h1>Jugement de cordon</h1>
+      <div class="opts">
+        <label>Niveau
+          <select id="level"><option value="easy">Facile</option><option value="normal" selected>Normal</option><option value="hard">Difficile</option></select>
+        </label>
+        <label><input type="checkbox" id="coach"> Aide immédiate</label>
+      </div>
+    </header>
+    <div class="pb" id="pbody">
+      <section id="view-actions">
+        <h2>Actions à la cible</h2>
+        <ul id="actions"></ul>
+        <p class="note" id="remaining"></p>
+      </section>
+      <section id="view-announce" hidden>
+        <h2>Score</h2>
+        <div class="scores" id="score-opts"></div>
+        <h2>Formulation</h2>
+        <ul id="phrase-opts"></ul>
+        <p class="note">Choisissez le score, puis la façon de l’annoncer à l’archer.</p>
+      </section>
+      <section id="view-result" class="res" hidden></section>
+    </div>
+    <footer class="pf">
+      <button class="big" id="btn-announce">Annoncer le score</button>
+      <div id="ann-foot" hidden style="display:none;gap:8px">
+        <button class="btn2" id="btn-back">Retour</button>
+        <button class="btn-ink" id="btn-validate" disabled>Valider l’annonce</button>
+      </div>
+      <button class="big" id="btn-next" hidden>Flèche suivante</button>
+    </footer>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+'use strict';
+const $ = (s) => document.querySelector(s);
+const V3 = THREE.Vector3, MM = 0.001, LINE_W = 0.8, CENTER_Y = 1.3, UP = new V3(0, 1, 0);
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+/* ---------- Rendu ---------- */
+const stageEl = $('#stage'), canvas = $('#c3d'), lensWrap = $('#lens-wrap');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true }); }
+catch (e) { $('#nogl').hidden = false; return; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setClearColor(0x0e1620);
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(45, 1, 0.005, 60);
+scene.add(new THREE.AmbientLight(0xffffff, 0.62));
+const sun = new THREE.DirectionalLight(0xffffff, 0.42);
+sun.position.set(1.2, 3, 3); scene.add(sun);
+
+/* ---------- Salle, cible, support ---------- */
+function box(w, h, d, color, x, y, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: color }));
+  m.position.set(x, y, z); scene.add(m); return m;
+}
+box(16, 0.02, 16, 0x5b4b3a, 0, -0.01, 4);
+box(16, 6, 0.1, 0x1b2838, 0, 3, -1.5);
+for (let i = -6; i <= 6; i++) box(0.05, 6, 0.02, 0x243750, i * 1.2, 3, -1.44);
+box(0.82, 0.82, 0.12, 0xc2aa6e, 0, CENTER_Y, -0.062);
+[-0.3, 0.3].forEach(function (x) {
+  box(0.05, 0.95, 0.05, 0x39404a, x, 0.475, -0.28);
+  box(0.05, 0.05, 0.3, 0x39404a, x, 0.9, -0.16);
+  box(0.05, 0.03, 0.5, 0x39404a, x, 0.015, -0.28);
+});
+box(0.7, 0.04, 0.04, 0x39404a, 0, 0.5, -0.28);
+
+function makeBlasonTexture() {
+  const S = Math.min(4096, renderer.capabilities.maxTextureSize);
+  const cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d');
+  const px = S / 440, c = S / 2;           /* 440 mm de papier, 9,3 px par mm */
+  g.fillStyle = '#f4f4ef'; g.fillRect(0, 0, S, S);
+  const zones = ['#f7d117', '#d9261c', '#49b6e8', '#161616', '#f4f4ef'];
+  for (let k = 10; k >= 1; k--) {
+    g.fillStyle = zones[Math.floor((k - 1) / 2)];
+    g.beginPath(); g.arc(c, c, k * 20 * px, 0, Math.PI * 2); g.fill();
+  }
+  g.lineWidth = LINE_W * px;
+  [20, 40, 60, 80, 100, 140, 180, 200].forEach(function (r) {
+    g.strokeStyle = (r === 140) ? '#f4f4ef' : '#111';
+    g.beginPath(); g.arc(c, c, r * px, 0, Math.PI * 2); g.stroke();
+  });
+  g.strokeStyle = '#111'; g.lineWidth = 0.6 * px;
+  g.beginPath(); g.moveTo(c - 3 * px, c); g.lineTo(c + 3 * px, c); g.moveTo(c, c - 3 * px); g.lineTo(c, c + 3 * px); g.stroke();
+  const t = new THREE.CanvasTexture(cv);
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+const blason = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.44), new THREE.MeshLambertMaterial({ map: makeBlasonTexture() }));
+blason.position.set(0, CENTER_Y, 0); scene.add(blason);
+const pinGeo = new THREE.CylinderGeometry(0.004, 0.004, 0.01, 12).rotateX(Math.PI / 2);
+const pinMat = new THREE.MeshPhongMaterial({ color: 0xcfd3d8 });
+[[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (p) {
+  const m = new THREE.Mesh(pinGeo, pinMat); m.position.set(p[0] * 0.205, CENTER_Y + p[1] * 0.205, 0.005); scene.add(m);
+});
+
+/* ---------- Flèches ---------- */
+const shaftMat = new THREE.MeshPhongMaterial({ color: 0x2b313a, specular: 0x666666, shininess: 70 });
+const vaneMats = [new THREE.MeshLambertMaterial({ color: 0xe6e6e0, side: THREE.DoubleSide }), new THREE.MeshLambertMaterial({ color: 0xd9261c, side: THREE.DoubleSide })];
+const nockMat = new THREE.MeshPhongMaterial({ color: 0xf2c31b });
+const bandMat = new THREE.MeshPhongMaterial({ color: 0xd9261c });
+function makeArrow(Rmm, dir) {
+  const R = Rmm * MM, L = 0.62, g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(R, R, L, 48).rotateX(Math.PI / 2).translate(0, 0, L / 2 - 0.06), shaftMat));
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(R * 1.015, R * 1.015, 0.012, 48).rotateX(Math.PI / 2).translate(0, 0, 0.43), bandMat));
+  [0, 120, 240].forEach(function (deg, i) {
+    const vg = new THREE.Group();
+    vg.add(new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.0012, 0.07).translate(R + 0.008, 0, 0.48), vaneMats[i === 0 ? 1 : 0]));
+    vg.rotation.z = deg * Math.PI / 180; g.add(vg);
+  });
+  g.add(new THREE.Mesh(new THREE.CylinderGeometry(R * 1.1, R * 0.85, 0.016, 24).rotateX(Math.PI / 2).translate(0, 0, 0.568), nockMat));
+  g.quaternion.setFromUnitVectors(new V3(0, 0, 1), dir.clone().normalize());
+  return g;
+}
+const arrowsGroup = new THREE.Group(); scene.add(arrowsGroup);
+const hole = new THREE.Mesh(new THREE.CircleGeometry(0.003, 32), new THREE.MeshBasicMaterial({ color: 0x050505 }));
+hole.visible = false; scene.add(hole);
+const ring = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.0018, 8, 64), new THREE.MeshBasicMaterial({ color: 0xf2c31b }));
+ring.visible = false; scene.add(ring);
+
+/* ---------- Caméra : vues, glisser pour orbiter, molette pour zoomer ---------- */
+const A3 = new V3(0, CENTER_Y, 0);
+let thetaRad = 1.2, viewName = 'start', designated = false, wiggle = 0, targetArrow = null, baseQuat = new THREE.Quaternion();
+const orbit = { yaw: 0, pitch: 0, zoom: 1 };
+const base = { pos: new V3(0, 1.38, 2.6), look: new V3(0, CENTER_Y, 0) };
+const goalPos = base.pos.clone(), goalLook = base.look.clone(), curPos = base.pos.clone(), curLook = base.look.clone();
+function updateGoal() {
+  const rel = base.pos.clone().sub(base.look).multiplyScalar(orbit.zoom);
+  rel.applyAxisAngle(UP, orbit.yaw);
+  rel.applyAxisAngle(new V3().crossVectors(UP, rel).normalize(), orbit.pitch);
+  goalPos.copy(base.look).add(rel); goalLook.copy(base.look);
+}
+function tangentLeft() { const t = new V3(-Math.sin(thetaRad), Math.cos(thetaRad), 0); if (t.x > 0) t.negate(); return t; }
+const VIEWS = {
+  start: function () { return { pos: new V3(A3.x * 0.25, 1.38, 2.6), look: new V3(0, CENTER_Y, 0), name: 'Vue d’arrivée', hint: 'À 2,6 m de la cible. Glissez pour tourner, molette pour zoomer.' }; },
+  side: function () { const s = A3.x >= 0 ? 1 : -1; return { pos: new V3(A3.x + s * 0.9, A3.y + 0.06, 0.34), look: A3.clone(), name: 'Sur le côté de la cible', hint: 'Vous voyez l’inclinaison de la flèche sans gêner les autres.' }; },
+  front: function () { return { pos: A3.clone().add(new V3(0, 0, 0.5)), look: A3.clone(), name: 'De face, de près', hint: 'À 50 cm, face à la flèche. Attention : un tube penché peut masquer la ligne.' }; },
+  tanL: function () { return { pos: A3.clone().addScaledVector(tangentLeft(), 0.42).add(new V3(0, 0, 0.2)), look: A3.clone().add(new V3(0, 0, 0.004)), name: 'Tangente, à gauche', hint: 'Vous regardez dans l’axe de la ligne, côté gauche de la flèche.' }; },
+  tanR: function () { return { pos: A3.clone().addScaledVector(tangentLeft(), -0.42).add(new V3(0, 0, 0.2)), look: A3.clone().add(new V3(0, 0, 0.004)), name: 'Tangente, à droite', hint: 'Vous regardez dans l’axe de la ligne, côté droit de la flèche.' }; }
+};
+function setView(name, snap) {
+  const v = VIEWS[name]();
+  base.pos.copy(v.pos); base.look.copy(v.look);
+  orbit.yaw = orbit.pitch = 0; orbit.zoom = 1; viewName = name; updateGoal();
+  if (snap) { curPos.copy(goalPos); curLook.copy(goalLook); }
+  $('#view-name').textContent = v.name; $('#view-hint').textContent = v.hint;
+}
+let drag = null;
+canvas.addEventListener('pointerdown', function (e) { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', function (e) {
+  if (!drag) return;
+  orbit.yaw = Math.max(-1, Math.min(1, orbit.yaw - (e.clientX - drag.x) * 0.004));
+  orbit.pitch = Math.max(-0.6, Math.min(0.6, orbit.pitch + (e.clientY - drag.y) * 0.004));
+  drag = { x: e.clientX, y: e.clientY }; updateGoal();
+});
+canvas.addEventListener('pointerup', function () { drag = null; });
+canvas.addEventListener('pointercancel', function () { drag = null; });
+canvas.addEventListener('wheel', function (e) { e.preventDefault(); orbit.zoom = Math.max(0.45, Math.min(1.4, orbit.zoom * (e.deltaY > 0 ? 1.08 : 0.92))); updateGoal(); }, { passive: false });
+
+/* ---------- Loupe (second rendu, caméra étroite braquée sur la flèche) ---------- */
+let lensOn = false, lensRenderer = null, lensSize = 300;
+const lensCam = new THREE.PerspectiveCamera(14, 1, 0.003, 5);
+function setLens(on) {
+  lensOn = on; lensWrap.style.display = on ? 'block' : 'none'; $('#lens-off').hidden = !on;
+  if (on && !lensRenderer) {
+    try {
+      lensRenderer = new THREE.WebGLRenderer({ canvas: $('#c-lens'), antialias: true });
+      lensRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      lensRenderer.setClearColor(0x0e1620); lensRenderer.setSize(lensSize, lensSize, false);
+    } catch (e) { lensRenderer = null; }
+  }
+}
+$('#lens-off').addEventListener('click', function () { setLens(false); });
+
+function resize() {
+  const w = stageEl.clientWidth, h = stageEl.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix();
+  lensSize = Math.round(Math.min(w, h) * 0.78);
+  lensWrap.style.width = lensWrap.style.height = lensSize + 'px';
+  if (lensRenderer) lensRenderer.setSize(lensSize, lensSize, false);
+}
+new ResizeObserver(resize).observe(stageEl); resize();
+
+let last = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  const k = 1 - Math.exp(-dt * 4.5);
+  curPos.lerp(goalPos, k); curLook.lerp(goalLook, k);
+  cam.position.copy(curPos); cam.lookAt(curLook);
+  ring.visible = designated && !lensOn && viewName === 'start';
+  if (ring.visible) { const s = 1 + 0.12 * Math.sin(t / 260); ring.scale.set(s, s, 1); }
+  if (targetArrow && wiggle > 0.001) {
+    wiggle *= Math.exp(-dt * 3);
+    targetArrow.quaternion.copy(baseQuat).multiply(new THREE.Quaternion().setFromAxisAngle(new V3(1, 0, 0), Math.sin(t / 18) * 0.06 * wiggle));
+  }
+  renderer.render(scene, cam);
+  if (lensOn && lensRenderer) {
+    const dir = curPos.clone().sub(A3).normalize();
+    lensCam.position.copy(A3).addScaledVector(dir, 0.14);
+    lensCam.lookAt(A3); lensRenderer.render(scene, lensCam);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------- Règles du jeu ---------- */
+const ACTIONS = [
+  { id: 'scores', good: true, label: 'S’assurer que les archers ont marqué le score des autres flèches', msg: 'Les archers confirment : les autres flèches sont inscrites sur la feuille.', why: 'Ni les flèches ni le blason ne se touchent avant l’enregistrement de tous les scores (II.02, B.6.2.1).' },
+  { id: 'cap', good: true, label: 'Enlever sa casquette', msg: 'Vous retirez votre casquette.', why: 'Rien ne doit tomber sur le blason ni faire de l’ombre sur la ligne.' },
+  { id: 'whistle', good: true, label: 'Enlever son sifflet', msg: 'Vous retirez votre sifflet.', why: 'Il ne doit pas se balancer devant le blason ni heurter la flèche.' },
+  { id: 'remote', good: true, label: 'Enlever la télécommande du Chronotir', msg: 'Vous posez la télécommande du Chronotir.', why: 'Pas de déclenchement accidentel ni d’objet qui pend devant la cible.' },
+  { id: 'designate', good: true, label: 'Demander à ce que la flèche soit désignée', msg: 'L’archer désigne la flèche en litige : un repère jaune apparaît autour d’elle.', why: 'Aucun doute sur la flèche que vous jugez.' },
+  { id: 'side', good: true, label: 'Se positionner sur le côté de la cible', msg: 'Vous vous placez sur le côté de la cible.', why: 'On ne gêne personne et on voit comment la flèche est inclinée.' },
+  { id: 'front', good: false, label: 'Se rapprocher et regarder la flèche de face', msg: 'Vous vous approchez et regardez la flèche de face.', why: 'De face, un tube penché peut masquer la ligne : cette vue induit en erreur. Il faut se placer dans l’axe de la ligne.' },
+  { id: 'whose', good: false, label: 'Demander à qui est la flèche', msg: 'L’archer : « C’est la mienne, la numéro 6. »', why: 'Peu importe à qui appartient la flèche : on la juge sans savoir qui l’a tirée.' },
+  { id: 'tanL', good: true, label: 'Se positionner à la tangente du cercle, à gauche de la flèche', msg: 'Vous vous placez dans l’axe de la ligne, à gauche de la flèche.', why: 'Vue dans l’axe de la ligne : on voit s’il reste un jour entre le tube et la ligne.' },
+  { id: 'tanR', good: true, label: 'Se positionner à la tangente du cercle, à droite de la flèche', msg: 'Vous vous placez dans l’axe de la ligne, à droite de la flèche.', why: 'Même contrôle depuis l’autre côté : les deux vues doivent donner la même réponse.' },
+  { id: 'loupe', good: true, label: 'Regarder avec la loupe', msg: 'Vous sortez la loupe. Glissez pour changer d’angle.', why: 'La loupe confirme ce que l’œil voit depuis la tangente.' },
+  { id: 'touch', good: false, label: 'Toucher la flèche pour vérifier qu’elle est bien fichée', msg: 'Vous touchez la flèche : elle bouge sous votre doigt.', why: 'Toucher la flèche en litige modifie la preuve (II.02, B.6.2.1).' },
+  { id: 'pull', good: false, label: 'Retirer la flèche pour regarder le trou', msg: 'Vous retirez la flèche : il ne reste que le trou, la position du tube est perdue.', why: 'Une flèche retirée ne peut plus être jugée.' },
+  { id: 'ask', good: false, label: 'Demander son avis à l’archer', msg: 'L’archer : « Elle touche la ligne, c’est évident ! »', why: 'La décision appartient à l’arbitre seul, jamais à l’archer concerné.' },
+  { id: 'crowd', good: false, label: 'Appeler un spectateur en renfort', msg: 'Un spectateur : « De là où je suis, je dirais 8. »', why: 'Un avis extérieur n’a aucune valeur et peut vous influencer.' }
+];
+const BY = {}; ACTIONS.forEach(function (a) { BY[a.id] = a; });
+const REQ = ACTIONS.filter(function (a) { return a.good && !a.optional; }).map(function (a) { return a.id; });
+const LOOKS = ['side', 'tanL', 'tanR', 'loupe'];
+const PREREQ = ['scores', 'designate', 'cap', 'whistle', 'remote'];
+const SHORT = { scores: 'vérifié les scores des autres flèches', designate: 'fait désigner la flèche', cap: 'retiré votre casquette', whistle: 'retiré votre sifflet', remote: 'retiré la télécommande du Chronotir' };
+const LEVELS = { easy: [1.2, 2.4], normal: [0.4, 1.2], hard: [0.12, 0.4] };
+const PHRASES = [
+  { id: 'think', text: function (s) { return 'Je pense qu’elle est ' + s; }, pts: 3, tip: 'Formule hésitante : elle ouvre la discussion.' },
+  { id: 'believe', text: function (s) { return 'Je crois qu’elle est ' + s; }, pts: 3, tip: 'Formule hésitante : elle ouvre la discussion.' },
+  { id: 'say', text: function (s) { return 'Moi, je dirais ' + s; }, pts: 6, tip: 'Formule qui présente la décision comme une opinion.' },
+  { id: 'is', text: function (s) { return 'Elle est ' + s; }, pts: 10, tip: 'Formule ferme : c’est une décision, pas une opinion.' }
+];
+const fmt = function (x) { return x.toFixed(2).replace('.', ','); };
+const history = [];
+let S = null, ann = { score: null, phrase: null };
+const el = { actions: $('#actions'), va: $('#view-actions'), vn: $('#view-announce'), vr: $('#view-result'), btnA: $('#btn-announce'), foot: $('#ann-foot'), btnV: $('#btn-validate'), btnN: $('#btn-next'), toast: $('#toast'), bubble: $('#bubble'), body: $('#pbody'), coach: $('#coach') };
+let toastTimer = 0;
+function toast(text, kind) {
+  el.toast.textContent = text; el.toast.className = kind || ''; el.toast.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(function () { el.toast.hidden = true; }, 4200);
+}
+function showPanel(which) {
+  el.va.hidden = which !== 'actions'; el.vn.hidden = which !== 'announce'; el.vr.hidden = which !== 'result';
+  el.btnA.hidden = which !== 'actions';
+  el.foot.hidden = which !== 'announce'; el.foot.style.display = which === 'announce' ? 'flex' : 'none';
+  el.btnN.hidden = which !== 'result'; el.body.scrollTop = 0;
+}
+
+/* ---------- Nouvelle flèche ---------- */
+function newRound() {
+  const lv = LEVELS[$('#level').value];
+  const Rmm = pick([2.75, 3.0, 3.25]);
+  const touches = Math.random() < 0.5;
+  const c = (touches ? -1 : 1) * rand(lv[0], lv[1]);          /* écart réel tube / ligne, en mm */
+  const d = 40 + LINE_W / 2 + Rmm + c;                          /* distance du centre du tube au centre du blason */
+  thetaRad = (Math.random() < 0.5 ? rand(35, 145) : rand(215, 325)) * Math.PI / 180;
+  const ux = Math.cos(thetaRad), uy = Math.sin(thetaRad);
+  A3.set(d * ux * MM, CENTER_Y + d * uy * MM, 0);
+  arrowsGroup.clear();
+  /* autres flèches : à l'écart des lignes de vue de l'arbitre */
+  const pts = [];
+  for (let tries = 0; pts.length < 5 && tries < 800; tries++) {
+    const r = rand(15, 185), a = rand(0, Math.PI * 2), x = r * Math.cos(a), y = r * Math.sin(a);
+    const dx = x - d * ux, dy = y - d * uy;
+    if (Math.hypot(dx, dy) < 55 || Math.abs(dx * ux + dy * uy) < 30 || Math.abs(dy) < 30) continue;
+    if (pts.some(function (p) { return Math.hypot(p.x - x, p.y - y) < 30; })) continue;
+    pts.push({ x: x, y: y });
+  }
+  pts.forEach(function (p) {
+    const phi = rand(3, 8) * Math.PI / 180, al = rand(0, Math.PI * 2), t = Math.tan(phi);
+    const ar = makeArrow(Rmm, new V3(Math.cos(al) * t, Math.sin(al) * t, 1));
+    ar.position.set(p.x * MM, CENTER_Y + p.y * MM, 0); arrowsGroup.add(ar);
+  });
+  const phi = rand(5, 9) * Math.PI / 180, t = Math.tan(phi);
+  let tx, ty;
+  if (Math.random() < 0.6) { tx = -ux * t; ty = -uy * t; }      /* penche vers le centre : masque la ligne vue de face */
+  else { const al = rand(0, Math.PI * 2); tx = Math.cos(al) * t; ty = Math.sin(al) * t; }
+  targetArrow = makeArrow(Rmm, new V3(tx, ty, 1));
+  targetArrow.position.copy(A3); arrowsGroup.add(targetArrow);
+  baseQuat = targetArrow.quaternion.clone(); wiggle = 0;
+  hole.geometry.dispose(); hole.geometry = new THREE.CircleGeometry(Rmm * MM, 32);
+  hole.position.set(A3.x, A3.y, 0.0008); hole.visible = false;
+  ring.position.set(A3.x, A3.y, 0.004); designated = false; setLens(false);
+  S = { Rmm: Rmm, c: c, touches: touches, truth: touches ? 9 : 8, done: new Set(), order: [], wrong: [], finished: false, lookStarted: false, missingAtLook: [], gear: { cap: true, whistle: true, remote: true } };
+  ann = { score: null, phrase: null };
+  document.querySelectorAll('.chip').forEach(function (n) { n.classList.remove('off'); });
+  el.bubble.hidden = true; el.toast.hidden = true;
+  setView('start', true); buildActions(); showPanel('actions'); updateRemaining(); updateStats();
+}
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function buildActions() {
+  el.actions.innerHTML = '';
+  shuffle(ACTIONS.slice()).forEach(function (a) {
+    const li = document.createElement('li'), b = document.createElement('button');
+    b.className = 'act'; b.dataset.id = a.id; b.innerHTML = '<span class="mark"></span><span>' + a.label + '</span>';
+    b.addEventListener('click', function () { doAction(a.id); });
+    li.appendChild(b); el.actions.appendChild(li);
+  });
+  paintMarks();
+}
+function paintMarks() {
+  const coach = el.coach.checked;
+  el.actions.querySelectorAll('.act').forEach(function (b) {
+    const a = BY[b.dataset.id], done = S.done.has(a.id) || S.wrong.indexOf(a.id) >= 0;
+    b.classList.toggle('done', done); b.classList.toggle('coach', coach && done);
+    b.classList.toggle('ok', a.good); b.classList.toggle('ko', !a.good);
+    b.disabled = done && LOOKS.indexOf(a.id) < 0;
+  });
+  updateRemaining();
+}
+function updateRemaining() {
+  const left = REQ.filter(function (id) { return !S.done.has(id); }).length;
+  $('#remaining').textContent = el.coach.checked ? (left ? 'Étapes de procédure restantes : ' + left + '.' : 'Procédure complète. Vous pouvez annoncer.') : '';
+}
+function updateStats() {
+  $('#stat-n').textContent = 'Flèche ' + (history.length + 1);
+  $('#stat-avg').textContent = history.length ? 'Moyenne ' + Math.round(history.reduce(function (s, v) { return s + v; }, 0) / history.length) + ' / 100' : 'Pas encore de moyenne';
+}
+
+/* ---------- Actions ---------- */
+function doAction(id) {
+  if (!S || S.finished) return;
+  const a = BY[id], first = !S.done.has(id) && S.wrong.indexOf(id) < 0;
+  if (first) { S.order.push(id); if (a.good) S.done.add(id); else S.wrong.push(id); }
+  const coach = el.coach.checked;
+  let warn = '';
+  if (first && LOOKS.indexOf(id) >= 0 && !S.lookStarted) {
+    S.lookStarted = true;
+    S.missingAtLook = PREREQ.filter(function (p) { return !S.done.has(p); });
+    if (coach && S.missingAtLook.length) warn = ' Attention, vous vous placez avant d’avoir ' + S.missingAtLook.map(function (p) { return SHORT[p]; }).join(', ') + '.';
+  }
+  if (id === 'cap' || id === 'whistle' || id === 'remote') { S.gear[id] = false; document.querySelector('[data-gear="' + id + '"]').classList.add('off'); }
+  if (id === 'designate') designated = true;
+  if (id === 'side' || id === 'front' || id === 'tanL' || id === 'tanR') setView(id);
+  if (id === 'loupe') setLens(!lensOn || first);
+  if (id === 'touch') wiggle = 1;
+  if (id === 'pull') { targetArrow.visible = false; hole.visible = true; }
+  if (first || LOOKS.indexOf(id) < 0) toast(coach ? (a.good ? '✓ ' : '✕ ') + a.msg + ' ' + a.why + warn : a.msg, coach ? (warn || !a.good ? 'bad' : 'good') : '');
+  paintMarks();
+}
+
+/* ---------- Annonce du score ---------- */
+function buildAnnounce() {
+  const so = $('#score-opts'); so.innerHTML = '';
+  [7, 8, 9, 10].forEach(function (v) {
+    const b = document.createElement('button'); b.className = 'sc'; b.textContent = v; b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', function () { ann.score = v; paintAnnounce(); }); so.appendChild(b);
+  });
+  const po = $('#phrase-opts'); po.innerHTML = '';
+  PHRASES.forEach(function (p) {
+    const li = document.createElement('li'), b = document.createElement('button');
+    b.className = 'ph-btn'; b.dataset.id = p.id; b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', function () { ann.phrase = p.id; paintAnnounce(); });
+    li.appendChild(b); po.appendChild(li);
+  });
+  paintAnnounce();
+}
+function paintAnnounce() {
+  document.querySelectorAll('.sc').forEach(function (b) { b.setAttribute('aria-pressed', String(+b.textContent === ann.score)); });
+  document.querySelectorAll('.ph-btn').forEach(function (b) {
+    const p = PHRASES.filter(function (x) { return x.id === b.dataset.id; })[0];
+    b.textContent = '« ' + p.text(ann.score === null ? '…' : ann.score) + ' »'; b.setAttribute('aria-pressed', String(ann.phrase === p.id));
+  });
+  el.btnV.disabled = ann.score === null || !ann.phrase;
+}
+el.btnA.addEventListener('click', function () { if (!S.finished) { buildAnnounce(); showPanel('announce'); } });
+$('#btn-back').addEventListener('click', function () { showPanel('actions'); });
+el.btnV.addEventListener('click', validate);
+el.btnN.addEventListener('click', newRound);
+el.coach.addEventListener('change', function () { paintMarks(); });
+$('#level').addEventListener('change', newRound);
+
+function validate() {
+  S.finished = true;
+  const ph = PHRASES.filter(function (x) { return x.id === ann.phrase; })[0];
+  el.bubble.textContent = '« ' + ph.text(ann.score) + ' »'; el.bubble.hidden = false;
+  const done = REQ.filter(function (id) { return S.done.has(id); }), missed = REQ.filter(function (id) { return !S.done.has(id); });
+  const nPre = PREREQ.filter(function (id) { return S.done.has(id); }).length;
+  const nLook = ['side', 'tanL', 'tanR', 'loupe'].filter(function (id) { return S.done.has(id); }).length;
+  const orderPenalty = S.missingAtLook.length ? 10 : 0;
+  const proc = Math.max(0, Math.min(50, nPre * 6 + nLook * 5 - orderPenalty - 8 * S.wrong.length));
+  const dec = ann.score === S.truth ? 40 : 0;
+  const total = proc + dec + ph.pts;
+  history.push(total); updateStats();
+  setView('tanR'); setLens(true);
+  renderResult({ ph: ph, done: done, missed: missed, proc: proc, dec: dec, total: total });
+  showPanel('result');
+}
+function renderResult(r) {
+  const c = S.c, ok = ann.score === S.truth;
+  const expl = S.touches
+    ? 'Le tube recouvre la ligne de ' + fmt(-c) + ' mm : il la touche, la flèche prend la valeur supérieure. Score réel : 9.'
+    : 'Il reste ' + fmt(c) + ' mm entre le tube et la ligne : la flèche est restée dans le rouge. Score réel : 8.';
+  const lim = Math.abs(c) < 0.3 ? ' Cas limite : seule une vue tangente avec la loupe permet de trancher.' : '';
+  const label = !ok ? 'Mauvaise décision' : r.total >= 90 ? 'Cordon jugé dans les règles' : r.total >= 70 ? 'Bonne décision, procédure à affiner' : 'Bonne décision, procédure incomplète';
+  let h = '<div class="verdict ' + (ok ? 'good' : 'bad') + '"><div class="tot">' + r.total + '<small> / 100</small></div><div class="lab">' + label + '</div></div>';
+  h += '<div class="expl"><b>Vous avez annoncé ' + ann.score + '.</b> ' + expl + lim + ' <span style="color:var(--ink-2)">(tube de ' + fmt(S.Rmm * 2) + ' mm, ligne de ' + fmt(LINE_W) + ' mm)</span></div>';
+  h += '<div class="row"><span>Procédure</span><b>' + r.proc + ' / 50</b></div><div class="row"><span>Décision</span><b>' + r.dec + ' / 40</b></div><div class="row"><span>Formulation</span><b>' + r.ph.pts + ' / 10</b></div>';
+  h += '<p class="note"><b>« ' + r.ph.text(ann.score) + ' »</b> : ' + r.ph.tip + ' Conseil de formation à valider avec vos formateurs.</p>';
+  h += '<h2>Procédure</h2><ul>';
+  r.done.forEach(function (id) { h += '<li class="ok">' + BY[id].label + '</li>'; });
+  r.missed.forEach(function (id) { h += '<li class="miss">Oublié : ' + BY[id].label + '<small>' + BY[id].why + '</small></li>'; });
+  S.wrong.forEach(function (id) { h += '<li class="ko">À éviter : ' + BY[id].label + '<small>' + BY[id].why + '</small></li>'; });
+  if (S.missingAtLook.length) h += '<li class="ko">Ordre (−10)<small>Vous vous êtes placé avant d’avoir ' + S.missingAtLook.map(function (p) { return SHORT[p]; }).join(', ') + '. Scores relevés, flèche désignée et accessoires retirés viennent toujours avant le placement.</small></li>';
+  h += '</ul>';
+  el.vr.innerHTML = h;
+}
+newRound();
+})();
+</script>
+</body>
+</html>
