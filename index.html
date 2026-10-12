@@ -277,8 +277,12 @@ function genWear(level, sp, A) {
   }
   if (hasA) {
     const th = Math.atan2(ay, ax), onLine = function (l) { return [rl * Math.cos(th + l / rl), rl * Math.sin(th + l / rl)]; };
-    /* trou noir sur le cordon, à l'endroit même du contact : impossible de juger, le doute profite à l'archer */
-    if (Math.random() < (heavy ? 0.35 : 0.2)) { const p = onLine(rand(-1.5, 1.5)); P.holes.push({ x: p[0], y: p[1], rx: 3.6, ry: 3.3, rot: rand(0, Math.PI) }); info.unreadable = true; info.lineHoles = true; }
+    /* morceau de blason arraché à l'endroit du contact : la ligne a disparu sur ~2 cm, impossible de juger, le doute profite à l'archer */
+    if (Math.random() < (heavy ? 0.2 : 0.12)) {
+      const p = onLine(0), c0 = onLine(0), rr = 9 * K, pts = [];
+      for (let i = 0; i < 12; i++) { const b = i / 12 * TAU, k = rr * rand(0.75, 1.15); pts.push([c0[0] + k * Math.cos(b), c0[1] + k * Math.sin(b)]); }
+      P.tears.push(pts); info.unreadable = true;
+    }
     /* trous noirs sur la ligne, près du contact : ils gênent la lecture mais la ligne reste déductible (arc imaginaire) */
     for (let i = 0, nl = heavy ? 3 + Math.floor(Math.random() * 3) : 2 + Math.floor(Math.random() * 2); i < nl; i++) {
       const l = (Math.random() < 0.5 ? -1 : 1) * rand(6, 17), p = onLine(l);
@@ -776,6 +780,8 @@ $('#disc').addEventListener('change', newRound);
 $('#line').addEventListener('change', newRound);
 $('#lens-off').addEventListener('click', function () { if (!S) return; if (S.finished) setLens(!lensOn); else doAction('loupe'); });
 
+/* Blason arraché au contact : au bénéfice du doute on peut donner la valeur haute, mais l'arbitre reste libre d'apprécier (la valeur donnée par l'écart mesuré est acceptée aussi) */
+function accepted(v) { return v === S.truth || (S.unreadable && v === (S.touches ? S.line.hi : S.line.lo)); }
 function validate() {
   S.finished = true;
   const ph = PHRASES.filter(function (x) { return x.id === ann.phrase; })[0];
@@ -786,7 +792,7 @@ function validate() {
   const alignPen = Math.min(6, 2 * S.alignFails);
   const orderPenalty = S.missingAtLook.length ? 10 : 0;
   const proc = Math.max(0, Math.min(50, nPre * 6 + lookPts - orderPenalty - alignPen - 8 * S.wrong.length));
-  const dec = ann.score === S.truth ? 40 : 0;
+  const dec = accepted(ann.score) ? 40 : 0;
   const total = proc + dec + ph.pts;
   history.push(total); updateStats();
   setView('tanR'); setLens(true);
@@ -795,11 +801,11 @@ function validate() {
   showPanel('result');
 }
 function renderResult(r) {
-  const c = S.c, ok = ann.score === S.truth;
+  const c = S.c, ok = accepted(ann.score);
   const nm = S.line.name, hi = S.line.hi, lo = S.line.lo;
   const where = S.side < 0 ? 'par l’intérieur' : 'par l’extérieur';
   const expl = S.unreadable
-    ? 'Un trou noir recouvre la ligne ' + nm + ' à l’endroit du contact : le blason est trop abîmé pour juger. Le doute profite à l’archer : valeur haute. Score réel : ' + hi + '. (Sans ce trou, l’écart tube / ligne aurait été de ' + fmt(c) + ' mm.)'
+    ? 'Un morceau du blason est arraché à l’endroit du contact : la ligne ' + nm + ' a disparu sur environ deux centimètres. Sur une cible aussi abîmée, on peut accorder la valeur haute (' + hi + ') au bénéfice du doute ; l’arbitre reste libre d’apprécier, et la valeur ' + (S.touches ? hi : lo) + ' (écart mesuré : ' + fmt(S.c) + ' mm) est acceptée aussi.'
     : S.touches
       ? 'Ligne ' + nm + ' : le tube la recouvre de ' + fmt(-c) + ' mm (' + where + ') : il la touche, la flèche prend la valeur supérieure. Score réel : ' + hi + '.'
       : 'Ligne ' + nm + ' : il reste ' + fmt(c) + ' mm entre le tube et la ligne (' + where + ') : la flèche ne la touche pas. Score réel : ' + lo + '.';
